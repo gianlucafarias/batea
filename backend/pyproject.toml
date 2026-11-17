@@ -1,0 +1,16 @@
+[project]
+name = "batea"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "essentia==2.1b6.dev1389",
+    "fastapi>=0.163.1",
+    "librosa>=1.0.1",
+    "mcp>=1.20",
+    "mutagen>=1.48.1",
+    "numpy>=2.5.4",
+    "pyrekordbox>=0.5.0",
+    "pywebview>=6.2.1",
+    "soundfile>=0.14.0",
+    "uvicorn[standard]>=0.54.0",
+]

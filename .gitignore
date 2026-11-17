@@ -1,0 +1,38 @@
+# Dependencias (se reinstalan con uv / npm)
+node_modules/
+backend/.venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Lo que se genera al compilar o empaquetar
+frontend/dist/
+build/
+release/
+*.dmg
+*.app/
+
+# Datos de la librería y de prueba: nunca van al repo
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.xml
+backups/
+
+# Variables locales y credenciales
+.env
+.env.*
+*.pem
+*.p12
+*.key
+*.mobileprovision
+
+# Sistema y editores
+.DS_Store
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp

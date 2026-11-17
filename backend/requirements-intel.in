@@ -1,0 +1,12 @@
+# Dependencias para el build de Intel (x86_64). Mismas librerías que pyproject.toml, pero con numpy < 2.3:
+# numba/llvmlite (que usa librosa) ya no publican binarios de macOS Intel en sus versiones nuevas.
+# Sin Essentia: no se pudo verificar que funcione en Intel (se cuelga bajo Rosetta); la tonalidad usa librosa.
+fastapi>=0.163.1
+librosa>=1.0.1
+mcp>=2
+mutagen>=1.48.1
+numpy<2.3
+pyrekordbox>=0.5.0
+pywebview>=6.2.1
+soundfile>=0.14.0
+uvicorn[standard]>=0.54.0
