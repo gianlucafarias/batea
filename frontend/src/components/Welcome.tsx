@@ -413,15 +413,14 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
                   <li>Batea calcula BPM, tono y energía cuando se lo pedís</li>
                 </ul>
               </button>
-              {search !== 'none' && (
-                <div className="su-card-choices" role="radiogroup" aria-label="Dónde buscar">
-                  <Option on={search === 'all'} disabled={locked} onSelect={() => setSearch('all')} title="Toda la Mac y los discos">macOS te va a pedir permiso. Batea solo lee.</Option>
-                  <Option on={search === 'folder'} disabled={locked} onSelect={() => (path ? setSearch('folder') : void pickFolder())} title="Solo una carpeta">
-                    {path ? <code>{path}</code> : 'Elegila vos.'}
-                  </Option>
-                  {path && search === 'folder' && <button className="wl-link su-card-extra" disabled={locked} onClick={() => void pickFolder()}>Cambiar carpeta</button>}
-                </div>
-              )}
+              {/* siempre visibles (la tarjeta no cambia de alto); apagadas hasta marcar la tarjeta */}
+              <div className="su-card-choices" role="radiogroup" aria-label="Dónde buscar" aria-disabled={search === 'none'}>
+                <Option on={search === 'all'} disabled={locked} onSelect={() => setSearch('all')} title="Toda la Mac y los discos">macOS te va a pedir permiso. Batea solo lee.</Option>
+                <Option on={search === 'folder'} disabled={locked} onSelect={() => (path ? setSearch('folder') : void pickFolder())} title="Solo una carpeta">
+                  {path ? <code title={path}>{path.split('/').filter(Boolean).pop()}</code> : 'Elegila vos.'}
+                </Option>
+                <button className="wl-link su-card-extra" disabled={locked || !path || search !== 'folder'} style={{ visibility: path && search === 'folder' ? 'visible' : 'hidden' }} onClick={() => void pickFolder()}>Cambiar carpeta</button>
+              </div>
             </div>
           </section>
           <div className="su-foot">

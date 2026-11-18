@@ -969,7 +969,10 @@ kbd {
 .su-card.on .su-brings li::before { background: var(--accent); opacity: 1; }
 .su-card.missing .su-brings { opacity: 0.45; }
 .su-card-extra { justify-self: start; margin: 0 16px 14px; font-size: 12px; }
-.su-card-choices { display: grid; gap: 2px; padding: 0 8px 10px; }
+.su-card-choices { display: grid; gap: 2px; padding: 0 8px 10px; transition: opacity var(--moderate) var(--ease); }
+.su-card:not(.on) .su-card-choices { opacity: 0.45; }
+.su-card:not(.on) .su-card-choices:hover { opacity: 0.7; }
+.su-card-choices code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .su-card-choices .wl-opt { padding: 7px 8px; }
 .su-card-choices .su-card-extra { margin: 2px 8px 0; }
 @media (max-width: 1080px) { .su-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
