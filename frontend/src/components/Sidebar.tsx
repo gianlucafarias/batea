@@ -3,7 +3,6 @@ import { api } from '../api'
 import { CORE_SOURCES, crateSource, isQueuedJob, isSessionCrate, sourceLabel } from '../sources'
 import { useApp } from '../store'
 import type { Crate } from '../types'
-import { fmtDate } from '../util'
 import { BrandMark, IconChevron, IconCrate, IconExport, IconEye, IconEyeOff, IconInbox, IconMap, IconPlus, IconTag } from './icons'
 import { FolderTree } from './FolderTree'
 import { Sources } from './Sources'
@@ -39,8 +38,7 @@ function Tree({ nodes, all, depth, showHidden, empty }: { nodes: Crate[]; all: C
             >
               {isFolder ? <IconChevron size={12} className={`caret${isOpen ? ' open' : ''}`} /> : <span style={{ width: 12 }} />}
               <span className="ellipsis" title={n.kind === 'session' && n.date ? n.date : undefined}>{n.name}</span>
-              {n.kind === 'session' && n.date && !n.name.includes(n.date) && <span className="tree-date num faint">{fmtDate(n.date)}</span>}
-              {!isFolder && <span className="count">{n.count}</span>}
+              {!isFolder && n.kind !== 'session' && <span className="count">{n.count}</span>}
               <button
                 className="eye"
                 title={n.hidden ? 'Mostrar' : 'Ocultar de Batea'}
