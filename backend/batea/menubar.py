@@ -1,9 +1,9 @@
-"""Ícono de Batea en la barra de arriba: qué suena en rekordbox y qué poner después.
+"""Ícono de Batea en la barra de arriba: qué suena en tu programa de DJ y qué poner después.
 
     python -m batea.menubar --parent <pid de Batea>
 
 Proceso aparte (la ventana de Batea sigue siendo de pywebview). Le pregunta a la Batea abierta
-por `/api/nowplaying`. Cada recomendación se puede arrastrar a un deck de rekordbox (se entrega
+por `/api/nowplaying`. Cada recomendación se puede arrastrar a un deck (se entrega
 el archivo, igual que desde el Finder). Doble click: abre el tema en Batea.
 """
 from __future__ import annotations
@@ -68,6 +68,7 @@ class Panel(NSObject):
         self = objc.super(Panel, self).init()
         self.recs = []
         self.now = None
+        self.is_rb = False
         self.busy = False
         return self
 
@@ -211,27 +212,34 @@ class Panel(NSObject):
         self.now = None
         self.recs = []
         other = ""
+        label = (data or {}).get("app_label") or "tu programa"
+        note = (data or {}).get("note")
+        is_rb = (data or {}).get("app") == "rekordbox"
+        self.is_rb = is_rb
         if data is None:
             self.hdr.setStringValue_("BATEA")
             self.nowTitle.setStringValue_("No encuentro Batea abierta")
             self.nowMeta.setStringValue_("")
-        elif not data.get("rekordbox"):
-            self.hdr.setStringValue_("REKORDBOX")
-            self.nowTitle.setStringValue_("rekordbox está cerrado")
-            self.nowMeta.setStringValue_("Abrilo y cargá un tema en un deck")
-        elif not data.get("now"):
+        elif not data.get("app"):
             self.hdr.setStringValue_("SONANDO AHORA")
+            self.nowTitle.setStringValue_("No hay ningún programa abierto")
+            self.nowMeta.setStringValue_("Abrí rekordbox, Serato o Traktor y cargá un tema")
+        elif not data.get("now"):
+            self.hdr.setStringValue_(f"{label.upper()}")
             self.nowTitle.setStringValue_("Todavía no detecto ningún tema")
-            self.nowMeta.setStringValue_("Cargá un tema en un deck")
+            self.nowMeta.setStringValue_(note or f"Cargá un tema en un deck de {label}")
         else:
             self.now = data["now"]
             self.recs = data.get("recs") or []
-            how = "cargado en un deck" if data["source"] == "deck" else "según el historial de rekordbox"
+            how = {"deck": "cargado en un deck", "aire": f"al aire en {label}"}.get(
+                data["source"], f"según el historial de {label}")
             self.hdr.setStringValue_(f"SONANDO AHORA  ·  {how}")
             self.nowTitle.setStringValue_(self.now.get("title") or "Sin título")
             self.nowMeta.setStringValue_(_meta(self.now))
             if data.get("loaded"):
                 other = "También cargado: " + " / ".join(t.get("title") or "?" for t in data["loaded"])
+            elif note:
+                other = note
         self.other.setStringValue_(other)
         self.openBtn.setEnabled_(self.now is not None)
         msg = ""
@@ -265,7 +273,8 @@ class Panel(NSObject):
         if not can:
             line = " · ".join(x for x in ("Archivo no disponible (¿SSD desconectado?)", line) if x)
         else:
-            line += KIND_NOTE.get(r.get("drag_kind"), "")
+            if self.is_rb:  # "no está en rekordbox" solo tiene sentido con rekordbox
+                line += KIND_NOTE.get(r.get("drag_kind"), "")
         b.setStringValue_(line)
         v.setToolTip_(line)
         return v

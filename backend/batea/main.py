@@ -146,6 +146,18 @@ def _log_to_file() -> None:
         pass
 
 
+def _start_traktor_broadcast() -> None:
+    """Escucha de Traktor (Broadcasting) para "ahora suena"; si el módulo no está o falla, no frena el arranque."""
+    try:
+        from . import traktor_broadcast
+
+        traktor_broadcast.start_if_enabled()
+    except ImportError:
+        pass
+    except Exception as e:  # noqa: BLE001
+        print(f"Traktor Broadcasting: no arrancó ({e})", file=sys.stderr)
+
+
 def main() -> None:
     if _run_module_mode():
         return
@@ -154,6 +166,7 @@ def main() -> None:
     port = int(os.environ.get("BATEA_PORT", 8765)) if server_only else _free_port()
     config = uvicorn.Config("batea.api:app", host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
+    _start_traktor_broadcast()
 
     from . import links
 

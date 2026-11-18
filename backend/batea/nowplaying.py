@@ -1,6 +1,8 @@
-"""Qué está sonando ahora en rekordbox (en esta Mac) y qué poner después.
+"""Qué está sonando ahora (rekordbox, Serato o Traktor, en esta Mac) y qué poner después.
 
-Dos pistas, sin tocar nunca nada de rekordbox:
+`state()` detecta qué programa de DJ está abierto y lee el que corresponda (rekordbox acá;
+Serato en nowplaying_serato.py; Traktor en nowplaying_traktor.py, contrato en live_base.py).
+Nunca se toca nada de los programas. Para rekordbox hay dos pistas:
 
 1. Archivos abiertos: mientras un tema está cargado en un deck, rekordbox suele tener el
    archivo abierto. `lsof` lo muestra al instante. El último que apareció cuenta como "ahora".
@@ -15,12 +17,15 @@ import shutil
 import sqlite3
 import subprocess
 import threading
+import importlib
+import re
 import time
 import unicodedata
 from datetime import datetime, timedelta
 
-from . import config, recommend
+from . import config, nowplaying_serato, recommend
 from .api_helpers import is_online, mark_online, real_path
+from .live_base import LiveReading, PlayRef
 
 LIVE_DIR = config.APP_DIR / "rekordbox-live"
 HISTORY_EVERY = 12.0
@@ -30,6 +35,9 @@ _lock = threading.Lock()
 _seen: dict[str, float] = {}          # archivo abierto -> cuándo lo vimos por primera vez
 _hist = {"t": 0.0, "sig": None, "ids": [], "name": None}
 _recs_cache: dict[tuple, list] = {}
+_titles = {"t": 0.0, "map": {}}
+TITLES_EVERY = 60.0
+ORDER = ("rekordbox", "serato", "traktor")
 
 
 # ------------------------------------------------------------------ rekordbox
@@ -135,68 +143,212 @@ def _card(c: sqlite3.Connection, tid: int) -> dict | None:
     return d
 
 
+def _recs_for(c: sqlite3.Connection, now_id: int | None, played: list[int], loaded: list[int], limit: int) -> list[dict]:
+    recs: list[dict] = []
+    if not now_id:
+        return recs
+    exclude = set(played) | set(loaded)
+    key = (now_id, tuple(sorted(exclude)))
+    items = _recs_cache.get(key)
+    if items is None:
+        res = recommend.recommend(c, now_id, limit + len(exclude) + 4)
+        items = [i for i in res["items"] if i["id"] not in exclude][:limit]
+        _recs_cache.clear()
+        _recs_cache[key] = items
+    for i in items:
+        card = _card(c, i["id"])
+        if card:
+            card["reasons"] = i["reasons"]
+            card["learned"] = i["learned"]
+            recs.append(card)
+    recs.sort(key=lambda r: not r["drag_path"])  # lo que se puede arrastrar ya, primero
+    return recs
+
+
+def _rb_scan() -> tuple[int | None, list[str], float]:
+    """pid de rekordbox, archivos abiertos y cuándo apareció el último (su 'actividad')."""
+    pid = rekordbox_pid()
+    if pid is None:
+        _seen.clear()
+        return None, [], 0.0
+    now_t = time.time()
+    files = open_audio_files(pid)
+    for f in files:
+        _seen.setdefault(f, now_t)
+    for f in list(_seen):
+        if f not in files:
+            del _seen[f]
+    return pid, files, max(_seen.values(), default=0.0)
+
+
+def _rekordbox_state(c: sqlite3.Connection, limit: int, files: list[str]) -> dict:
+    rb_ids, session = _history()
+    by_rb = {}
+    if rb_ids:
+        q = ",".join("?" * len(set(rb_ids)))
+        by_rb = {r["rb_id"]: r["id"] for r in c.execute(f"SELECT id, rb_id FROM tracks WHERE rb_id IN ({q})", list(set(rb_ids)))}
+    played = [by_rb[x] for x in rb_ids if x in by_rb]
+    hist_pos = {tid: i for i, tid in enumerate(played)}
+
+    loaded: list[int] = []
+    # el último que se cargó primero; si aparecieron juntos, decide el historial
+    for f in sorted(_seen, key=lambda f: (-_seen[f], -hist_pos.get(_track_for_path(c, f) or -1, -1))):
+        tid = _track_for_path(c, f)
+        if tid and tid not in loaded:
+            loaded.append(tid)
+
+    if loaded:
+        now_id, source = loaded[0], "deck"
+    elif played:
+        now_id, source = played[-1], "historial"
+    else:
+        now_id, source = None, None
+
+    return {
+        "rekordbox": True,
+        "source": source,
+        "now": _card(c, now_id) if now_id else None,
+        "loaded": [x for x in (_card(c, t) for t in loaded[1:]) if x],
+        "recs": _recs_for(c, now_id, played, loaded, limit),
+        "session": session,
+        "played": len(played),
+        "open_files": len(files),
+    }
+
+
+# ------------------------------------------------------------------ otros programas
+def _norm(s: str | None) -> str:
+    if not s:
+        return ""
+    s = unicodedata.normalize("NFD", s.casefold())
+    return re.sub(r"[^a-z0-9]+", " ", "".join(ch for ch in s if not unicodedata.combining(ch))).strip()
+
+
+def _title_map(c: sqlite3.Connection) -> dict[str, list[tuple[int, str, str]]]:
+    """título normalizado (y 'artista título') -> [(id, artista normalizado, source)]; se rearma cada TITLES_EVERY s."""
+    if time.time() - _titles["t"] < TITLES_EVERY and _titles["map"]:
+        return _titles["map"]
+    m: dict[str, list] = {}
+    for r in c.execute("SELECT id, title, artist, source FROM tracks WHERE hidden=0 AND title IS NOT NULL"):
+        a = _norm(r["artist"])
+        ent = (r["id"], a, r["source"])
+        for k in {_norm(r["title"]), _norm(f"{r['artist'] or ''} {r['title']}")}:
+            if k:
+                m.setdefault(k, []).append(ent)
+    _titles.update(t=time.time(), map=m)
+    return m
+
+
+def _track_for_ref(c: sqlite3.Connection, ref: PlayRef, app: str) -> int | None:
+    """Tema de Batea para algo que el programa cargó: por ruta; si no, por título y artista."""
+    if ref.path:
+        tid = _track_for_path(c, ref.path)
+        if tid:
+            return tid
+    t, a = _norm(ref.title), _norm(ref.artist)
+    if not t:
+        return None
+    m = _title_map(c)
+    cands = list(dict.fromkeys(m.get(t, []) + (m.get(_norm(f"{ref.artist or ''} {ref.title}"), []) if a else [])))
+    if a:
+        # artista de Batea vacío = viene dentro del título: se acepta
+        cands = [x for x in cands if not x[1] or x[1] == a or x[1] in a or a in x[1]]
+    if not cands:
+        return None
+    pref = [x for x in cands if x[2] == app] or cands
+    return pref[0][0]
+
+
+def _live_state(c: sqlite3.Connection, reading: LiveReading, limit: int) -> dict:
+    def ids(refs: list[PlayRef]) -> list[int]:
+        out: list[int] = []
+        for r in refs:
+            tid = _track_for_ref(c, r, reading.app)
+            if tid and tid not in out:
+                out.append(tid)
+        return out
+
+    played = ids(reading.played)
+    loaded = ids(reading.loaded)
+    now_id = _track_for_ref(c, reading.now, reading.app) if reading.now else None
+    if now_id:
+        source = "aire"
+    elif loaded:
+        now_id, source = loaded[0], "deck"
+    elif played:
+        now_id, source = played[-1], "historial"
+    else:
+        source = None
+    return {
+        "rekordbox": False,
+        "source": source,
+        "now": _card(c, now_id) if now_id else None,
+        "loaded": [x for x in (_card(c, t) for t in loaded if t != now_id) if x],
+        "recs": _recs_for(c, now_id, played, [t for t in loaded if t != now_id], limit),
+        "session": reading.session,
+        "played": len(played),
+        "open_files": 0,
+    }
+
+
+def _traktor():
+    try:
+        return importlib.import_module("batea.nowplaying_traktor")
+    except Exception:  # noqa: BLE001  (todavía no existe o falla al importar: se ignora)
+        return None
+
+
+def _readers() -> dict:
+    out = {"serato": nowplaying_serato}
+    t = _traktor()
+    if t is not None:
+        out["traktor"] = t
+    return out
+
+
+def _is_running(mod) -> bool:
+    try:
+        return bool(mod.running())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _label(app: str | None, readers: dict) -> str | None:
+    if app == "rekordbox":
+        return "rekordbox"
+    return getattr(readers.get(app), "LABEL", None) or (app.capitalize() if app else None)
+
+
 def state(c: sqlite3.Connection, limit: int = 8) -> dict:
     with _lock:
-        pid = rekordbox_pid()
-        if pid is None:
-            _seen.clear()
-            return {"rekordbox": False, "now": None, "loaded": [], "recs": [], "source": None}
+        readers = _readers()
+        pid, files, rb_activity = _rb_scan()
+        run = (["rekordbox"] if pid is not None else []) + [a for a, m in readers.items() if _is_running(m)]
+        run.sort(key=lambda a: ORDER.index(a) if a in ORDER else len(ORDER))
 
-        now_t = time.time()
-        files = open_audio_files(pid)
-        for f in files:
-            _seen.setdefault(f, now_t)
-        for f in list(_seen):
-            if f not in files:
-                del _seen[f]
+        extra: dict[str, LiveReading] = {}
+        for app in run:
+            if app == "rekordbox":
+                continue
+            try:
+                r = readers[app].read(c)
+            except Exception:  # noqa: BLE001
+                r = None
+            extra[app] = r or LiveReading(app)
 
-        rb_ids, session = _history()
-        by_rb = {}
-        if rb_ids:
-            q = ",".join("?" * len(set(rb_ids)))
-            by_rb = {r["rb_id"]: r["id"] for r in c.execute(f"SELECT id, rb_id FROM tracks WHERE rb_id IN ({q})", list(set(rb_ids)))}
-        played = [by_rb[x] for x in rb_ids if x in by_rb]
-        hist_pos = {tid: i for i, tid in enumerate(played)}
+        chosen = run[0] if run else None
+        if len(run) > 1:
+            act = {"rekordbox": rb_activity, **{a: r.activity for a, r in extra.items()}}
+            chosen = max(run, key=lambda a: (act.get(a, 0.0), -run.index(a)))
 
-        loaded: list[int] = []
-        # el último que se cargó primero; si aparecieron juntos, decide el historial
-        for f in sorted(_seen, key=lambda f: (-_seen[f], -hist_pos.get(_track_for_path(c, f) or -1, -1))):
-            tid = _track_for_path(c, f)
-            if tid and tid not in loaded:
-                loaded.append(tid)
-
-        if loaded:
-            now_id, source = loaded[0], "deck"
-        elif played:
-            now_id, source = played[-1], "historial"
+        if chosen is None:
+            res = {"rekordbox": False, "now": None, "loaded": [], "recs": [], "source": None}
+            note = None
+        elif chosen == "rekordbox":
+            res = _rekordbox_state(c, limit, files)
+            note = None
         else:
-            now_id, source = None, None
-
-        recs: list[dict] = []
-        if now_id:
-            exclude = set(played) | set(loaded)
-            key = (now_id, tuple(sorted(exclude)))
-            items = _recs_cache.get(key)
-            if items is None:
-                res = recommend.recommend(c, now_id, limit + len(exclude) + 4)
-                items = [i for i in res["items"] if i["id"] not in exclude][:limit]
-                _recs_cache.clear()
-                _recs_cache[key] = items
-            for i in items:
-                card = _card(c, i["id"])
-                if card:
-                    card["reasons"] = i["reasons"]
-                    card["learned"] = i["learned"]
-                    recs.append(card)
-            recs.sort(key=lambda r: not r["drag_path"])  # lo que se puede arrastrar ya, primero
-
-        return {
-            "rekordbox": True,
-            "source": source,
-            "now": _card(c, now_id) if now_id else None,
-            "loaded": [x for x in (_card(c, t) for t in loaded[1:]) if x],
-            "recs": recs,
-            "session": session,
-            "played": len(played),
-            "open_files": len(files),
-        }
+            res = _live_state(c, extra[chosen], limit)
+            note = extra[chosen].note
+        res.update(app=chosen, app_label=_label(chosen, readers), running=run, note=note)
+        return res
