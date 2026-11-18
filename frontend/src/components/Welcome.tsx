@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, isNotFound, type LibrarySource, type SetupPlan } from '../api'
-import { CORE_SOURCES, isActiveJob, isQueuedJob, legacyRekordbox, missingSource, pickSourcePath, sourceLabel, sourceName, syncJobSource } from '../sources'
+import logoRekordbox from '../assets/logos/rekordbox.png'
+import logoSerato from '../assets/logos/serato.png'
+import logoTraktor from '../assets/logos/traktor.png'
+import { CORE_SOURCES, isActiveJob, isQueuedJob, legacyRekordbox, missingSource, pickSourcePath, sourceLabel, syncJobSource } from '../sources'
 import { useApp } from '../store'
 import type { Job } from '../types'
 import { hash, keyColor } from '../util'
@@ -297,6 +300,21 @@ function Option({ on, onSelect, title, children, disabled, kind = 'radio' }: { o
   )
 }
 
+// ------------------------------------------------------------------ tarjetas de la primera pantalla
+const SOURCE_CARDS: Record<string, { logo: string; ratio: string; h: number; brings: string[] }> = {
+  rekordbox: { logo: logoRekordbox, ratio: '1916 / 325', h: 34, brings: ['Temas con BPM, tono y análisis', 'Playlists, carpetas y My Tags', 'Historial de sesiones: de ahí salen las sugerencias'] },
+  traktor: { logo: logoTraktor, ratio: '999 / 147', h: 27, brings: ['Temas con BPM, tono y rating', 'Playlists y smartlists', 'Historial con el deck y cuánto sonó cada tema'] },
+  serato: { logo: logoSerato, ratio: '2000 / 476', h: 34, brings: ['Temas con BPM, tono, rating y reproducciones', 'Crates y smart crates', 'Historial con lo que de verdad sonó'] },
+}
+
+function cardStatus(source: LibrarySource): string {
+  const parts = ['Encontrado']
+  if (source.version) parts.push(`versión ${source.version}`)
+  if (source.detail) parts.push(source.detail)
+  else if (source.track_count) parts.push(`${source.track_count.toLocaleString('es-AR')} temas`)
+  return parts.join(' · ')
+}
+
 /** Primera pantalla: solo la pregunta. Las diapositivas aparecen después, mientras se importa. */
 function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; busy: boolean }) {
   const { status, toast, updateSource } = useApp()
@@ -361,42 +379,53 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
             <h1>Bienvenido a Batea</h1>
             <p>Elegí qué querés traer. No se importa, no se busca y no se analiza nada hasta que lo confirmes.</p>
           </div>
-          <section className="su-group" aria-labelledby="su-programs">
-            <div className="su-group-head">
-              <span className="eyebrow" id="su-programs">¿Qué programas usás?</span>
-              <span className="faint">Se pueden marcar varios</span>
-            </div>
-            <div className="su-programs">
-              {sources.map((source) => {
-                const on = selected.includes(source.kind)
-                return (
-                  <div key={source.kind} className="su-option">
-                    <Option kind="check" on={on} disabled={!source.found || locked} onSelect={() => setChoices((prev) => ({ ...prev, [source.kind]: !on }))} title={sourceName(source)}>
+          <section className="su-cards" aria-label="Qué traer">
+            {sources.map((source) => {
+              const on = selected.includes(source.kind)
+              const info = SOURCE_CARDS[source.kind]
+              return (
+                <div key={source.kind} className={`su-card${on ? ' on' : ''}${source.found ? '' : ' missing'}`}>
+                  <button type="button" role="checkbox" aria-checked={on} aria-label={source.label} className="su-card-main" disabled={!source.found || locked}
+                    onClick={() => setChoices((prev) => ({ ...prev, [source.kind]: !on }))}>
+                    <span className="wl-mark check su-card-mark">{on && <IconCheck size={11} />}</span>
+                    <span className="su-logo-box">
+                      {info?.logo ? <span className="su-logo" style={{ ['--logo' as string]: `url(${info.logo})`, aspectRatio: info.ratio, height: info.h }} /> : <b className="su-logo-text">{source.label}</b>}
+                    </span>
+                    <span className="su-card-status">
                       {source.found
-                        ? <>{source.detail || (source.track_count ? `${source.track_count.toLocaleString('es-AR')} temas` : 'Encontrado')}{source.app_running && ' · está abierto: se leen los datos del último guardado'}</>
+                        ? <>{cardStatus(source)}{source.app_running && <em>Está abierto: se leen los datos del último guardado</em>}</>
                         : 'No lo encontré en esta Mac'}
-                    </Option>
-                    {!source.found && <button className="wl-link" disabled={locked} onClick={() => void locate(source)}>Está en otra carpeta…</button>}
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-          <section className="su-group" role="radiogroup" aria-labelledby="su-music">
-            <span className="eyebrow" id="su-music">Tu propia música (archivos que no están en ningún programa)</span>
-            <Option on={search === 'none'} disabled={locked} onSelect={() => setSearch('none')} title="Más tarde">Lo busco yo cuando quiera, desde «Analizar e importar».</Option>
-            <Option on={search === 'all'} disabled={locked} onSelect={() => setSearch('all')} title="Buscar en mi Mac y mis discos">
-              Recorre tu carpeta personal y los discos conectados, y vuelve a mirar al abrir y al enchufar un disco. Solo lee. macOS va a pedir permisos.
-            </Option>
-            <div className="su-option">
-              <Option on={search === 'folder'} disabled={locked} onSelect={() => (path ? setSearch('folder') : void pickFolder())} title="Solo una carpeta">
-                {path ? <code>{path}</code> : 'Elegís una carpeta y no busco en ningún otro lado.'}
-              </Option>
-              {path && <button className="wl-link" disabled={locked} onClick={() => void pickFolder()}>Cambiar</button>}
+                    </span>
+                    {info && <ul className="su-brings">{info.brings.map((b) => <li key={b}>{b}</li>)}</ul>}
+                  </button>
+                  {!source.found && <button className="wl-link su-card-extra" disabled={locked} onClick={() => void locate(source)}>Está en otra carpeta…</button>}
+                </div>
+              )
+            })}
+            <div className={`su-card${search !== 'none' ? ' on' : ''}`}>
+              <button type="button" role="checkbox" aria-checked={search !== 'none'} aria-label="Tu música" className="su-card-main" disabled={locked}
+                onClick={() => setSearch(search === 'none' ? (path ? 'folder' : 'all') : 'none')}>
+                <span className="wl-mark check su-card-mark">{search !== 'none' && <IconCheck size={11} />}</span>
+                <span className="su-logo-box"><span className="su-logo-own"><IconFolder size={22} /> Tu música</span></span>
+                <span className="su-card-status">Archivos que no están en ningún programa</span>
+                <ul className="su-brings">
+                  <li>Temas sueltos de tu Mac y tus discos</li>
+                  <li>BPM, tono y energía los calcula Batea, cuando lo pidas</li>
+                </ul>
+              </button>
+              {search !== 'none' && (
+                <div className="su-card-choices" role="radiogroup" aria-label="Dónde buscar">
+                  <Option on={search === 'all'} disabled={locked} onSelect={() => setSearch('all')} title="Toda la Mac y los discos">Solo lee. macOS va a pedir permisos.</Option>
+                  <Option on={search === 'folder'} disabled={locked} onSelect={() => (path ? setSearch('folder') : void pickFolder())} title="Solo una carpeta">
+                    {path ? <code>{path}</code> : 'Elegís cuál.'}
+                  </Option>
+                  {path && search === 'folder' && <button className="wl-link su-card-extra" disabled={locked} onClick={() => void pickFolder()}>Cambiar carpeta</button>}
+                </div>
+              )}
             </div>
           </section>
           <div className="su-foot">
-            <span className="faint">El análisis (BPM, tono, energía) nunca es automático: lo pedís vos, de a un tema por vez.</span>
+            <span className="faint">De cada programa se lee una copia: nunca se modifica nada en rekordbox, Traktor ni Serato. Podés marcar varios.</span>
             <button className="btn primary wl-cta" disabled={locked || (search === 'folder' && !path)} onClick={() => nothing ? setConfirming(true) : onStart(plan)}>
               {nothing ? 'Entrar sin importar nada' : 'Empezar'}
             </button>

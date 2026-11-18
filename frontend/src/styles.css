@@ -932,7 +932,7 @@ kbd {
 .wl-opt-t code { font-family: var(--mono); font-size: 11px; color: var(--text-2); word-break: break-all; }
 .wl-link { color: var(--accent-2); text-decoration: underline; cursor: pointer; }
 .welcome.setup { grid-template-rows: auto 1fr; overflow-y: auto; }
-.su-body { align-self: center; justify-self: center; width: min(780px, 100%); display: grid; gap: 16px; padding-bottom: 24px; animation: rise 0.5s var(--ease); }
+.su-body { align-self: center; justify-self: center; width: min(1080px, 100%); display: grid; gap: 16px; padding-bottom: 24px; animation: rise 0.5s var(--ease); }
 .su-head h1 { margin: 0 0 8px; font-size: clamp(30px, 4vw, 42px); line-height: 1.05; font-weight: 800; letter-spacing: -0.02em; font-stretch: 112%; }
 .su-head p { margin: 0; color: var(--text-2); font-size: 15px; line-height: 1.55; }
 .su-group { display: grid; gap: 4px; padding: 14px 16px 10px; border: 1px solid var(--line); border-radius: var(--r-lg); background: color-mix(in srgb, var(--surface) 88%, transparent); }
@@ -943,6 +943,43 @@ kbd {
 .su-option .wl-link { flex: none; margin-right: 10px; font-size: 11.5px; }
 .su-programs .su-option { display: grid; align-content: start; }
 .su-programs .wl-link { justify-self: start; margin: -5px 0 5px 36px; }
+/* tarjetas de programas (logo grande + qué se importa) */
+.su-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.su-card { position: relative; display: grid; grid-template-rows: 1fr auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--muted); transition: border-color var(--moderate) var(--ease), background-color var(--moderate) var(--ease), color var(--moderate) var(--ease); }
+.su-card:hover:not(.missing) { border-color: var(--line-2); color: var(--text-2); }
+.su-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); color: var(--text); }
+.su-card.missing { border-style: dashed; }
+.su-card-main { display: grid; grid-template-rows: auto auto auto 1fr; align-content: start; gap: 12px; width: 100%; padding: 18px 16px 16px; text-align: left; color: inherit; border-radius: inherit; }
+.su-card-main:disabled { cursor: default; }
+.su-card-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.su-card-mark { position: absolute; top: 12px; right: 12px; margin: 0; }
+.su-card.on .su-card-mark { background: var(--accent); border-color: var(--accent); }
+.su-logo-box { display: flex; align-items: center; height: 64px; padding-right: 22px; }
+.su-logo { display: block; max-width: 100%; background: currentColor; -webkit-mask: var(--logo) left center / contain no-repeat; mask: var(--logo) left center / contain no-repeat; transition: opacity var(--moderate) var(--ease); }
+.su-card.missing .su-logo { opacity: 0.35; }
+.su-logo-own { display: flex; align-items: center; gap: 10px; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; font-stretch: 112%; }
+.su-logo-text { font-size: 24px; font-weight: 800; }
+.su-card-status { font-size: 12px; line-height: 1.45; color: var(--text-2); min-height: 2.9em; }
+.su-card.missing .su-card-status { color: var(--faint); }
+.su-card-status em { display: block; font-style: normal; color: var(--accent-2); }
+.su-brings { margin: 0; padding: 12px 0 0; list-style: none; display: grid; gap: 7px; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.4; }
+.su-brings li { position: relative; padding-left: 14px; }
+.su-brings li::before { content: ''; position: absolute; left: 0; top: 0.55em; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.6; }
+.su-card.on .su-brings li::before { background: var(--accent); opacity: 1; }
+.su-card.missing .su-brings { opacity: 0.45; }
+.su-card-extra { justify-self: start; margin: 0 16px 14px; font-size: 12px; }
+.su-card-choices { display: grid; gap: 2px; padding: 0 8px 10px; }
+.su-card-choices .wl-opt { padding: 7px 8px; }
+.su-card-choices .su-card-extra { margin: 2px 8px 0; }
+@media (max-width: 1080px) { .su-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .su-cards { grid-template-columns: 1fr; } }
+@media (max-height: 820px) {
+  .su-card-main { gap: 8px; padding: 12px 12px 12px; }
+  .su-logo-box { height: 46px; }
+  .su-logo { zoom: 0.8; }
+  .su-brings { gap: 4px; padding-top: 8px; font-size: 12px; }
+}
+
 .su-foot { display: flex; align-items: center; justify-content: space-between; gap: 20px; font-size: 12px; margin-top: 4px; }
 .su-confirm { padding: 20px; gap: 16px; }
 .su-confirm .wl-cta-row { justify-content: flex-end; align-items: center; }
