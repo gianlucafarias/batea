@@ -946,7 +946,7 @@ kbd {
 /* tarjetas de programas (logo grande + qué se importa) */
 .su-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .su-card { position: relative; display: grid; grid-template-rows: 1fr auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--text-2); transition: border-color var(--moderate) var(--ease), background-color var(--moderate) var(--ease), color var(--moderate) var(--ease); }
-.su-card:hover:not(.missing) { border-color: var(--line-2); color: var(--text-2); }
+.su-card:not(.on):not(.missing):hover { background: color-mix(in srgb, var(--surface-2) 70%, var(--surface)); }  /* el borde nunca cambia con el hover */
 .su-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); color: var(--text); }
 .su-card.missing { border-style: dashed; }
 .su-card-main { display: grid; grid-template-rows: auto auto auto 1fr; align-content: start; gap: 12px; width: 100%; padding: 18px 16px 16px; text-align: left; color: inherit; border-radius: inherit; }
