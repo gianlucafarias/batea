@@ -4,7 +4,8 @@ import { GlyphSwap } from '../lib/fluidHover'
 import { useApp } from '../store'
 import { cleanTitle, fmtBpm, parseKey } from '../util'
 import { KeyBadge, Sleeve } from './bits'
-import { IconPause, IconPlay, IconSwap, IconThumbDown, IconThumbUp, IconX } from './icons'
+import { IconMix, IconPause, IconPlay, IconSwap, IconThumbDown, IconThumbUp, IconX } from './icons'
+import { MixPicker } from './MixPicker'
 import { CenterMixer, DeckEQ, MixHelp, Stepper, type TransitionLength } from './mixlab/Controls'
 import { Timeline, type TimelineHandle } from './mixlab/Timeline'
 import { barAt, beatAt, clamp, defaultEntry, makeDeck, phaseOffset, playbackRate, signed, type Deck, type Placement, type Side, type Transition } from './mixlab/model'
@@ -65,6 +66,7 @@ function MixInner({ a, b }: { a: number; b: number }) {
   const [length, setLength] = useState<TransitionLength>(16)
   const [mixer, setMixer] = useState({ auto: true, manual: DEFAULT_MANUAL })
   const [help, setHelp] = useState(false)
+  const [pickB, setPickB] = useState(false)
   const [time, setTime] = useState(0)
   const timeline = useRef<TimelineHandle>(null)
   const modal = useRef<HTMLDivElement>(null)
@@ -168,6 +170,10 @@ function MixInner({ a, b }: { a: number; b: number }) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const target = e.target instanceof HTMLElement ? e.target : null
+      if (pickB) {                                  // el selector de B maneja su teclado; Esc solo lo cierra a él
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setPickB(false) }
+        return
+      }
       if (e.key === 'Escape') {
         e.preventDefault()
         e.stopPropagation()
@@ -191,7 +197,7 @@ function MixInner({ a, b }: { a: number; b: number }) {
     }
     window.addEventListener('keydown', key, true)
     return () => window.removeEventListener('keydown', key, true)
-  }, [closeMix, decks, help, seekVisible, stepEntry, stepPhase, toggle, virtualT])
+  }, [closeMix, decks, help, pickB, seekVisible, stepEntry, stepPhase, toggle, virtualT])
 
   const editManual = (update: (m: ManualMix) => ManualMix) => {
     const current = snapshot()
@@ -248,7 +254,7 @@ function MixInner({ a, b }: { a: number; b: number }) {
           <h2 id="mx-title">Probar mezcla</h2>
           <div className="mx-header-controls">
             <button className="btn ghost sm icon" aria-label="Invertir A y B" title="Invertir A y B" onClick={() => openMix(b, a)}><IconSwap size={16} /></button>
-            {/* slot: Cambiar B */}
+            <button className="btn ghost sm" title="Probar A con otro tema" onClick={() => setPickB(true)}><IconMix size={14} /> Cambiar B</button>
             <MixHelp open={help} toggle={() => setHelp((v) => !v)} />
             <button className="btn ghost sm icon" onClick={closeMix} aria-label="Cerrar" title="Cerrar (Esc)"><IconX size={16} /></button>
           </div>
@@ -319,6 +325,7 @@ function MixInner({ a, b }: { a: number; b: number }) {
           <button className="btn primary" onClick={() => void save('mix')}><IconThumbUp size={14} /> Mezclan bien</button>
         </div>
       </div>
+      {pickB && <MixPicker a={a} exclude={[b]} onClose={() => setPickB(false)} onPick={(nb) => openMix(a, nb)} />}
     </div>
   )
 }

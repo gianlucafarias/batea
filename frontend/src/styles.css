@@ -659,7 +659,8 @@ kbd {
 .mx-header, .mx-header-controls, .mx-deck-meta, .mx-deck-role { display: flex; align-items: center; }
 .mx-header { justify-content: space-between; min-height: 30px; }
 .mx-header-controls { gap: 5px; }
-.mx-header-controls .btn { height: 30px; width: 30px; }
+.mx-header-controls .btn { height: 30px; }
+.mx-header-controls .btn.icon { width: 30px; }
 .mx-header-controls .help-btn { height: 24px; width: 24px; margin: 0 3px; }
 .mx-help { position: relative; display: grid; place-items: center; }
 .mx-help-menu {
