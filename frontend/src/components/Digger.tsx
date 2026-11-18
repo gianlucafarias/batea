@@ -6,6 +6,7 @@ import type { Track } from '../types'
 import { cleanTitle, fmtBpm, fmtDate, fmtTime, hash } from '../util'
 import { EnergyMeter, KeyBadge, Sleeve, Stars } from './bits'
 import { IconPause, IconPlay } from './icons'
+import { SourceBadges } from './SourceBadges'
 
 const BEHIND = 14
 const AHEAD = 3
@@ -137,6 +138,7 @@ export function Digger({ tracks, crateName }: { tracks: Track[]; crateName: stri
           </div>
           {!t.online && <div className="faint" style={{ fontSize: 11.5, marginTop: -6 }}>Disco desconectado</div>}
           <AnalysisNotice t={t} online={!!t.online} />
+          <SourceBadges sources={t.sources} />
           <div className="stat-grid">
             <div><span className="eyebrow">BPM</span><span className="v">{fmtBpm(t.bpm)}</span></div>
             <div><span className="eyebrow">Tono</span><span><KeyBadge k={t.key} /></span></div>

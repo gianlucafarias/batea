@@ -9,6 +9,19 @@ export interface AgentInfo {
 }
 export interface AgentList { agents: AgentInfo[]; manual: unknown; ready: boolean }
 
+class ApiError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
+export function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404
+}
+
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method,
@@ -21,7 +34,7 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
       const j = await res.json()
       msg = j.detail || msg
     } catch { /* sin cuerpo */ }
-    throw new Error(msg)
+    throw new ApiError(msg, res.status)
   }
   return res.json()
 }
@@ -65,7 +78,44 @@ export interface Status {
   autodiscover: boolean
   export_path: string
   jobs: Job[]
+  sources?: LibrarySource[]
 }
+
+export interface LibrarySource {
+  kind: string
+  label: string
+  short: string
+  found: boolean
+  enabled: boolean
+  version: string | null
+  detail: string | null
+  app_running: boolean
+  last_sync: string | null
+  track_count: number | null
+  locations: { path: string; version: string | null; volume: string | null; modified: number | string | null }[]
+}
+
+export interface TrackSource {
+  source: string
+  label: string
+  bpm: number | null
+  key_camelot: string | null
+  key_raw: string | null
+  rating: number | null
+  play_count: number | null
+  cues_count: number | null
+  date_added: string | null
+  last_played: string | null
+  synced_at: string | null
+}
+
+export interface SetupPlan {
+  sources: string[]
+  search: 'none' | 'all' | 'folder'
+  path: string | null
+}
+
+interface SetupResult { jobs?: Job[]; sync?: Job; discover?: Job }
 
 export const api = {
   status: () => get<Status>('/api/status'),
@@ -73,7 +123,16 @@ export const api = {
   openUpdate: () => post<{ opened: string }>('/api/update/open'),
   jobs: () => get<Job[]>('/api/jobs'),
   welcomeDone: () => post('/api/welcome/done'),
-  setup: (b: { rekordbox: boolean; search: 'none' | 'all' | 'folder'; path?: string | null }) => post<{ sync?: Job; discover?: Job }>('/api/setup', b),
+  setup: (plan: SetupPlan) => post<SetupResult>('/api/setup', plan),
+  setupLegacy: ({ sources, search, path }: SetupPlan) =>
+    post<SetupResult>('/api/setup', { rekordbox: sources.includes('rekordbox'), search, path }),
+  sources: () => get<{ sources: LibrarySource[] }>('/api/sources'),
+  syncSource: (kind: string) => post<Job>(`/api/sources/${encodeURIComponent(kind)}/sync`),
+  syncAllSources: () => post<{ jobs: Job[] }>('/api/sources/sync-all'),
+  setSourceEnabled: (kind: string, enabled: boolean) =>
+    post<{ ok: boolean; kind: string; enabled: boolean }>(`/api/sources/${encodeURIComponent(kind)}/enabled`, { enabled }),
+  setSourceLocation: (kind: string, path: string) =>
+    post<LibrarySource>(`/api/sources/${encodeURIComponent(kind)}/location`, { path }),
   setAutodiscover: (enabled: boolean) => post<{ autodiscover: boolean }>('/api/autodiscover', { enabled }),
   cancelJob: (id: string) => post(`/api/jobs/${id}/cancel`),
   sync: () => post<Job>('/api/sync/rekordbox'),
@@ -92,6 +151,7 @@ export const api = {
   tracks: (crate: string | number | null, f: Filters = {}) =>
     get<Track[]>(`/api/tracks?${filtersToQuery({ ...(crate != null ? { crate: String(crate) } : {}), ...f } as Filters)}`),
   track: (id: number) => get<TrackDetail>(`/api/tracks/${id}`),
+  trackSources: (id: number) => get<{ sources: TrackSource[] }>(`/api/tracks/${id}/sources`),
   openPending: () => get<OpenTarget[]>('/api/open/pending'),
   agents: () => get<AgentList>('/api/agents'),
   setAgent: (id: string, connected: boolean) => post<AgentList>(`/api/agents/${id}`, { connected }),
@@ -150,6 +210,6 @@ export const artUrl = (id: number, size: 's' | 'm' | 'l' = 'm') => `/api/tracks/
 
 declare global {
   interface Window {
-    pywebview?: { api: { pick_folder: () => Promise<string | null> } }
+    pywebview?: { api: { pick_folder: () => Promise<string | null>; pick_file?: () => Promise<string | null> } }
   }
 }

@@ -172,7 +172,7 @@ export function TrackMenu() {
       })()}
       {one && (
         <Item onClick={run(() => app.setEditTrack(one.id))} disabled={one.source !== 'local'}
-          hint={one.source !== 'local' ? 'Los datos de los temas de rekordbox se editan en rekordbox' : 'Título, artista, sello, género…'}>
+          hint={one.source !== 'local' ? 'Los datos se editan en el programa de origen' : 'Título, artista, sello, género…'}>
           Editar datos…
         </Item>
       )}

@@ -7,7 +7,7 @@ import { FoundMusic } from './FoundMusic'
 import { ListView, sortTracks, type SortKey } from './ListView'
 
 export function Inbox() {
-  const { status, jobs, trackJob, toast, libraryVersion, setExportOpen } = useApp()
+  const { status, jobs, trackJob, toast, libraryVersion, setExportOpen, setSourcesOpen } = useApp()
   const [ks, setKs] = useState<KeyStatus | null>(null)
   const keyJob = jobs.find((j) => j.kind === 'keys' && j.status === 'running')
   const [local, setLocal] = useState<Track[]>([])
@@ -25,7 +25,13 @@ export function Inbox() {
       </header>
       <div className="inbox">
         <div>
-          <div className="card">
+          {status?.sources ? (
+            <div className="card">
+              <h3>Librerías de DJ</h3>
+              <p>Importá tus temas, playlists e historial desde Fuentes. Batea lee una copia de cada librería.</p>
+              <div><button className="btn primary" onClick={() => setSourcesOpen(true)}>Abrir Fuentes</button></div>
+            </div>
+          ) : <div className="card">
             <h3>rekordbox</h3>
             <p>
               Batea lee una copia de tu librería: temas, playlists, puntajes, My Tags e historial. Nunca escribe en rekordbox.
@@ -36,7 +42,7 @@ export function Inbox() {
               </button>
               <span className="muted" style={{ fontSize: 12 }}>{status?.rekordbox_found ? `Última: ${status.last_sync ? new Date(status.last_sync).toLocaleString('es-AR') : 'nunca'}` : 'No encontré rekordbox en esta Mac'}</span>
             </div>
-          </div>
+          </div>}
         </div>
 
         <FoundMusic />
@@ -47,7 +53,7 @@ export function Inbox() {
             {ks && <span className="muted num">{ks.missing.toLocaleString('es-AR')} sin tono de {ks.total.toLocaleString('es-AR')}{status?.universe ? ` en ${status.universe.name}` : ''}</span>}
           </div>
           <p>
-            Batea calcula el tono de los temas que rekordbox no analizó. Esos tonos se ven con borde punteado y nunca reemplazan uno de rekordbox.
+            Batea calcula el tono de los temas que todavía no tienen uno. Los tonos calculados se ven con borde punteado.
           </p>
           {ks?.accuracy ? (
             <div className="muted" style={{ fontSize: 12.5 }}>
@@ -79,7 +85,7 @@ export function Inbox() {
 
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 12px' }}>
-            <h3>Fuera de rekordbox</h3>
+            <h3>Música propia</h3>
             <span className="muted num">{local.length}</span>
             <div style={{ flex: 1 }} />
             {local.length > 0 && <button className="btn sm" onClick={() => setExportOpen(true)}>Llevar a rekordbox…</button>}

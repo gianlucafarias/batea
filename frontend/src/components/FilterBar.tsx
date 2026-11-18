@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Seg } from '../lib/Seg'
 import { spring, usePresence } from '../lib/motion'
+import { CORE_SOURCES, sourceLabel } from '../sources'
 import { useApp } from '../store'
 import type { Filters, Tag } from '../types'
 import { keyColor, ROLE_CATEGORIES } from '../util'
@@ -58,6 +59,9 @@ interface Props {
 
 export function FilterBar({ filters, onChange, onSaveSmart, counts }: Props) {
   const tags = useApp((s) => s.tags)
+  const sources = useApp((s) => s.status?.sources)
+  const multiSource = (sources?.filter((source) => source.enabled).length ?? 0) > 1
+  const sourceOptions = [...CORE_SOURCES, ...(sources ?? []).filter((source) => source.enabled && !CORE_SOURCES.some((kind) => kind === source.kind)).map((source) => source.kind)]
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState(filters.q ?? '')
   const popRef = useRef<HTMLDivElement>(null)
@@ -85,6 +89,10 @@ export function FilterBar({ filters, onChange, onSaveSmart, counts }: Props) {
   if (filters.bpm_min || filters.bpm_max) active.push({ label: `BPM ${filters.bpm_min ?? '…'}–${filters.bpm_max ?? '…'}`, clear: () => set({ bpm_min: undefined, bpm_max: undefined }) })
   if (filters.energy_min || filters.energy_max) active.push({ label: `Energía ${filters.energy_min ?? 1}–${filters.energy_max ?? 10}`, clear: () => set({ energy_min: undefined, energy_max: undefined }) })
   if (filters.rating_min) active.push({ label: `★ ${filters.rating_min}+`, clear: () => set({ rating_min: undefined }) })
+  if (filters.in_source) active.push({
+    label: filters.in_source === 'none' ? 'En ningún programa' : `En ${sourceLabel(filters.in_source)}`,
+    clear: () => set({ in_source: undefined }),
+  })
   if (filters.key_compat) active.push({ label: `Compatible ${filters.key_compat}`, clear: () => set({ key_compat: undefined }), color: keyColor(filters.key_compat) })
   for (const k of filters.keys ?? []) active.push({ label: k, clear: () => set({ keys: filters.keys!.filter((x) => x !== k) }), color: keyColor(k) })
   for (const id of filters.tags ?? []) {
@@ -120,6 +128,16 @@ export function FilterBar({ filters, onChange, onSaveSmart, counts }: Props) {
                   ))}
                 </Seg>
               </div>
+              {multiSource && (
+                <label className="range-row">
+                  <span className="eyebrow">Está en</span>
+                  <select className="input" style={{ gridColumn: 'span 2' }} value={filters.in_source ?? ''} onChange={(e) => set({ in_source: e.target.value || undefined })}>
+                    <option value="">Cualquiera</option>
+                    {sourceOptions.map((kind) => <option key={kind} value={kind}>{sourceLabel(kind)}</option>)}
+                    <option value="none">Ninguno</option>
+                  </select>
+                </label>
+              )}
             </div>
             <div className="tag-group">
               <span className="eyebrow">Tonalidad (Camelot)</span>

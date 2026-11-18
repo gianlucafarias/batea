@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
+import { crateSource, sourceLabel } from '../sources'
 import { useApp } from '../store'
 import type { Crate } from '../types'
 import { hash } from '../util'
@@ -10,6 +11,8 @@ type Previews = Awaited<ReturnType<typeof api.previews>>
 
 function CrateCard({ crate, preview }: { crate: Crate; preview?: Previews[string] }) {
   const go = useApp((s) => s.go)
+  const kind = crateSource(crate)
+  const program = kind ? sourceLabel(kind) : ''
   const recs = (preview ?? []).slice(0, 5)
   const tilt = (hash(String(crate.id).length * 7919 + Number(String(crate.id).replace(/\D/g, '') || 3)) - 0.5) * 4
   return (
@@ -37,7 +40,7 @@ function CrateCard({ crate, preview }: { crate: Crate; preview?: Previews[string
         <span className="tape" style={{ ['--tilt' as string]: `${tilt}deg` }}>{crate.name}</span>
         <div className="meta">
           <span>{crate.count.toLocaleString('es-AR')} discos</span>
-          <span>{{ smart: 'inteligente', user: 'mía', virtual: '', playlist: 'rekordbox', smart_rb: 'rb smart', session: crate.date ?? 'sesión', folder: '', session_folder: '', dir: 'carpeta', artist: 'artista' }[crate.kind]}</span>
+          <span>{{ smart: 'inteligente', user: 'mía', virtual: '', playlist: program, smart_rb: program, session: [program, crate.date ?? 'sesión'].filter(Boolean).join(' · '), folder: '', session_folder: '', dir: 'carpeta', artist: 'artista' }[crate.kind]}</span>
         </div>
       </div>
     </button>
@@ -45,7 +48,7 @@ function CrateCard({ crate, preview }: { crate: Crate; preview?: Previews[string
 }
 
 export function Home() {
-  const { crates, virtualCrates, status, trackJob, libraryVersion, go, loadMeta } = useApp()
+  const { crates, virtualCrates, status, trackJob, libraryVersion, go, loadMeta, setSourcesOpen } = useApp()
   const [previews, setPreviews] = useState<Previews>({})
   useEffect(() => { api.previews().then(setPreviews).catch(() => {}) }, [libraryVersion, crates.length])
 
@@ -70,11 +73,12 @@ export function Home() {
       <div className="home">
         <div className="empty" style={{ marginTop: 80 }}>
           <h3>Batea está vacía</h3>
-          <p>{status.rekordbox_found
+          <p>{status.sources ? 'Traé tu librería desde Fuentes o elegí una carpeta con música.' : status.rekordbox_found
             ? 'Traé tu librería de rekordbox o una carpeta con música.'
             : 'No encontré rekordbox. Traé una carpeta con música o arrastrala a la ventana.'}</p>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            {status.rekordbox_found && <button className="btn primary" onClick={async () => trackJob(await api.sync())}><IconSync size={14} /> Importar rekordbox</button>}
+            {status.sources ? <button className="btn primary" onClick={() => setSourcesOpen(true)}>Abrir Fuentes</button>
+              : status.rekordbox_found && <button className="btn primary" onClick={async () => trackJob(await api.sync())}><IconSync size={14} /> Importar rekordbox</button>}
             <button className="btn" onClick={() => go('inbox')}>Analizar carpeta</button>
           </div>
         </div>
@@ -113,7 +117,7 @@ export function Home() {
         ))}
         {lastSessions.length > 0 && (
           <section className="shelf">
-            <div className="shelf-h"><h2>Últimas sesiones</h2><span className="faint">del historial de rekordbox</span></div>
+            <div className="shelf-h"><h2>Últimas sesiones</h2></div>
             <div className="shelf-grid">
               {lastSessions.map((c) => <CrateCard key={c.id} crate={c} preview={previews[String(c.id)]} />)}
             </div>

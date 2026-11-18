@@ -2,6 +2,7 @@ import { artistCrate } from './Artist'
 import { Seg } from '../lib/Seg'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
+import { crateSource, sourceLabel } from '../sources'
 import { useApp } from '../store'
 import type { Filters, Track } from '../types'
 import { plural } from '../util'
@@ -20,7 +21,7 @@ function loadMode(): Mode {
 }
 
 const KIND_LABEL: Record<string, string> = {
-  playlist: 'Playlist de rekordbox', folder: 'Carpeta de rekordbox', smart_rb: 'Smart playlist de rekordbox',
+  playlist: 'Playlist', folder: 'Carpeta', smart_rb: 'Caja inteligente',
   dir: 'Carpeta', artist: 'Artista', session: 'Sesión del historial', session_folder: 'Historial', user: 'Caja tuya', smart: 'Caja inteligente', virtual: 'Atajo',
 }
 
@@ -71,7 +72,7 @@ export function CrateView() {
     const offline = tracks.filter((t) => !t.online).length
     return { min: bpms[0], max: bpms[bpms.length - 1], med: bpms[Math.floor(bpms.length / 2)], offline }
   }, [tracks])
-  // temas fuera de rekordbox que faltan analizar (y no están ya en la fila)
+  // Temas propios que faltan analizar y no están en la fila.
   const pending = useMemo(() => {
     const inQueue = new Set([analysisQueue.now, ...analysisQueue.ids])
     return (tracks ?? []).filter((t) => t.unanalyzed === 'pending' && t.online && !inQueue.has(t.id)).map((t) => t.id)
@@ -111,6 +112,8 @@ export function CrateView() {
   const selected = useMemo(() => (multi.size ? sorted.filter((t) => multi.has(t.id)) : []), [sorted, multi])
 
   if (!crate) return <div className="empty"><h3>Caja no encontrada</h3></div>
+  const source = crateSource(crate)
+  const program = source && source !== 'user' ? sourceLabel(source) : null
   const editable = crate.kind === 'user' || crate.kind === 'smart'
 
   const saveSmart = async () => {
@@ -131,12 +134,12 @@ export function CrateView() {
         )}
         <div style={{ minWidth: 0 }}>
           <div className="eyebrow ellipsis" style={{ marginBottom: 6 }} title={dir?.path}>
-            {KIND_LABEL[crate.kind] ?? ''}{crate.date ? ` · ${crate.date}` : ''}{dir?.trail.length ? ` · ${dir.trail.join(' › ')}` : ''}
+            {KIND_LABEL[crate.kind] ?? ''}{program ? ` · ${program}` : ''}{crate.date ? ` · ${crate.date}` : ''}{dir?.trail.length ? ` · ${dir.trail.join(' › ')}` : ''}
           </div>
           <h1 className="ellipsis">{crate.name}</h1>
           {/* subtítulos de vista: cuántos temas y como mucho un dato más; nada de instrucciones */}
           <div className="sub">
-            {tracks ? plural(tracks.length, 'tema', 'temas') : 'Cargando…'}
+            {source === 'traktor' && crate.kind === 'smart_rb' && crate.count === 0 ? 'Las reglas de Traktor se evalúan en Traktor.' : tracks ? plural(tracks.length, 'tema', 'temas') : 'Cargando…'}
             {stats && stats.min ? ` · ${Math.round(stats.min)} a ${Math.round(stats.max)} BPM` : ''}
           </div>
         </div>

@@ -19,7 +19,8 @@ export interface Track {
   date_added: string | null
   play_count: number
   last_played: string | null
-  source: 'rekordbox' | 'local'
+  source: string
+  sources?: string[]
   color: string | null
   has_art: number
   year: number | null
@@ -39,7 +40,7 @@ export interface Relation {
   a: number
   b: number
   kind: 'mix' | 'similar' | 'mashup' | 'avoid' | 'history'
-  source: 'user' | 'history' | 'feedback'
+  source: 'user' | 'history' | `history:${string}` | 'feedback'
   count: number
   note: string | null
   other_id: number
@@ -79,6 +80,7 @@ export interface Crate {
   id: number | string
   name: string
   kind: 'virtual' | 'dir' | 'artist' | 'folder' | 'playlist' | 'smart_rb' | 'session_folder' | 'session' | 'user' | 'smart'
+  source?: string
   parent_id?: number | null
   hidden?: number
   date?: string | null
@@ -98,13 +100,14 @@ export interface Filters {
   key_compat?: string
   rating_min?: number
   source?: string
+  in_source?: string
 }
 
 export interface Job {
   id: string
   kind: string
   label: string
-  status: 'running' | 'done' | 'error'
+  status: 'queued' | 'running' | 'done' | 'error'
   progress: number
   message: string
   result: Record<string, unknown>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { api } from '../api'
+import { api, isNotFound, type LibrarySource, type SetupPlan } from '../api'
+import { CORE_SOURCES, isActiveJob, isQueuedJob, legacyRekordbox, missingSource, pickSourcePath, sourceLabel, sourceName, syncJobSource } from '../sources'
 import { useApp } from '../store'
 import type { Job } from '../types'
 import { hash, keyColor } from '../util'
@@ -274,25 +275,22 @@ function ArtAI() {
 interface Slide { id: string; eyebrow: string; title: string; body: string; art: ReactNode }
 
 const SLIDES: Slide[] = [
-  { id: 'bateas', eyebrow: 'Bateas', title: 'Tu librería, como una batea de discos.', body: 'Hojeás las cajas con sus carátulas, filtrás por tono, BPM y energía, y armás tus propias cajas. Todo lo de rekordbox entra tal cual y se lee sin modificarlo.', art: <ArtCrates /> },
+  { id: 'bateas', eyebrow: 'Bateas', title: 'Tu librería, como una batea de discos.', body: 'Hojeás las cajas con sus carátulas, filtrás por tono, BPM y energía, y armás tus propias cajas. Leé tus librerías de rekordbox, Traktor o Serato sin modificarlas.', art: <ArtCrates /> },
   { id: 'tagger', eyebrow: 'Etiquetado rápido', title: 'Un tema en segundos, sin tocar el mouse.', body: 'Escuchás y etiquetás con el teclado: energía, puntaje, intro, outro, mashup, acapella. También en tanda, con varios temas juntos.', art: <ArtKeys /> },
   { id: 'map', eyebrow: 'Mapa', title: 'Tu música como una constelación.', body: 'Cada tema es una estrella. Los que mezclás juntos forman racimos; tocás una y se encienden sus conexiones y sugeridos. Además, la rueda Camelot de siempre.', art: <ArtMap /> },
   { id: 'mix', eyebrow: 'Probar la mezcla', title: 'Probá la mezcla antes de la noche.', body: 'Dos temas alineados por la grilla de compases: elegís en qué compás entra el segundo y escuchás el cruce. El veredicto queda anotado como relación.', art: <ArtMix /> },
-  { id: 'suggest', eyebrow: 'Qué poner después', title: 'Sugerencias que aprenden de cómo mezclás.', body: 'Combinan tono, BPM y energía con tu historial real de rekordbox, y te explican el porqué de cada una. También desde el ícono de la barra de menú, mientras tocás.', art: <ArtSuggest /> },
+  { id: 'suggest', eyebrow: 'Qué poner después', title: 'Sugerencias que aprenden de cómo mezclás.', body: 'Combinan tono, BPM y energía con tu historial de rekordbox, Traktor o Serato. Cada sugerencia te dice por qué aparece. También desde el ícono de la barra de menú, mientras tocás.', art: <ArtSuggest /> },
   { id: 'universes', eyebrow: 'Universos', title: 'Un universo para cada tipo de noche.', body: 'Limitá todo Batea a las playlists y carpetas que elijas: techno, cumbia, casamientos. No borra nada; con «Toda la librería» volvés a ver todo.', art: <ArtUniverses /> },
-  { id: 'found', eyebrow: 'Música nueva', title: 'También encuentra lo que todavía no pasó por rekordbox.', body: 'Busca sola en tu Mac y en cada disco que conectes. El análisis (BPM, tono, energía, intro y outro) se hace solo cuando lo pedís, de a un tema por vez, para no trabar la computadora.', art: <ArtFolders /> },
+  { id: 'found', eyebrow: 'Música nueva', title: 'Encontrá música fuera de rekordbox, Traktor o Serato.', body: 'Busca sola en tu Mac y en cada disco que conectes. El análisis (BPM, tono, energía, intro y outro) se hace solo cuando lo pedís, de a un tema por vez, para no trabar la computadora.', art: <ArtFolders /> },
   { id: 'ai', eyebrow: 'Con tu IA', title: 'Hablá con tu librería.', body: 'Conectá Claude, Codex o Cursor y preguntales por tus sesiones, armá sets o pedí ideas. Cada tema que nombran es un link que abre Batea.', art: <ArtAI /> },
 ]
 
 const SLIDE_MS = 8500
 
 // ------------------------------------------------------------------ qué traer (se pregunta; nada arranca solo)
-type Search = 'none' | 'all' | 'folder'
-interface Plan { rekordbox: boolean; search: Search; path: string | null }
-
 function Option({ on, onSelect, title, children, disabled, kind = 'radio' }: { on: boolean; onSelect: () => void; title: string; children?: ReactNode; disabled?: boolean; kind?: 'radio' | 'check' }) {
   return (
-    <button type="button" role={kind} aria-checked={on} disabled={disabled} className={`wl-opt${on ? ' on' : ''}`} onClick={onSelect}>
+    <button type="button" role={kind === 'check' ? 'checkbox' : 'radio'} aria-checked={on} disabled={disabled} className={`wl-opt${on ? ' on' : ''}`} onClick={onSelect}>
       <span className={`wl-mark ${kind}`}>{on && (kind === 'check' ? <IconCheck size={11} /> : <i />)}</span>
       <span className="wl-opt-t"><b>{title}</b>{children && <span>{children}</span>}</span>
     </button>
@@ -300,148 +298,235 @@ function Option({ on, onSelect, title, children, disabled, kind = 'radio' }: { o
 }
 
 /** Primera pantalla: solo la pregunta. Las diapositivas aparecen después, mientras se importa. */
-function SetupScreen({ rbFound, plan, setPlan, onStart, busy }: { rbFound: boolean; plan: Plan; setPlan: (p: Plan) => void; onStart: () => void; busy: boolean }) {
+function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; busy: boolean }) {
+  const { status, toast, updateSource } = useApp()
+  const [choices, setChoices] = useState<Record<string, boolean>>({})
+  const [search, setSearch] = useState<SetupPlan['search']>('none')
+  const [path, setPath] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [picking, setPicking] = useState(false)
+  const detected = status?.sources ?? [legacyRekordbox(status)]
+  const sources = [
+    ...CORE_SOURCES.map((kind) => detected.find((source) => source.kind === kind) ?? missingSource(kind)),
+    ...detected.filter((source) => source.found && !CORE_SOURCES.some((kind) => kind === source.kind)),
+  ]
+  const selected = sources.filter((source) => source.found && (choices[source.kind] ?? true)).map((source) => source.kind)
+  const plan = { sources: selected, search, path }
+  const nothing = selected.length === 0 && search === 'none'
+  const locked = busy || picking
+
   const pickFolder = async () => {
-    if (!window.pywebview?.api) { useApp.getState().toast('Elegir una carpeta funciona dentro de la app de Batea', 'error'); return }
-    const p = await window.pywebview.api.pick_folder()
-    if (p) setPlan({ ...plan, search: 'folder', path: p })
+    setPicking(true)
+    try {
+      const picker = window.pywebview?.api
+      if (!picker) throw new Error('Elegir una carpeta funciona dentro de la app de Batea')
+      const folder = await picker.pick_folder()
+      if (folder) { setPath(folder); setSearch('folder') }
+    } catch (error) { toast((error as Error).message, 'error') } finally { setPicking(false) }
   }
-  const nothing = !plan.rekordbox && plan.search === 'none'
+
+  const locate = async (source: LibrarySource) => {
+    setPicking(true)
+    try {
+      const location = await pickSourcePath()
+      if (!location) return
+      const updated = await api.setSourceLocation(source.kind, location)
+      updateSource(updated)
+      if (updated.found) setChoices((prev) => ({ ...prev, [source.kind]: true }))
+      else toast(`No encontré ${source.label} en esa ubicación`, 'error')
+    } catch (error) {
+      toast(isNotFound(error) ? `No pude encontrar ${source.label} en esa ubicación` : (error as Error).message, 'error')
+    } finally { setPicking(false) }
+  }
+
   return (
     <div className="welcome setup" role="dialog" aria-label="Configuración inicial de Batea">
       <header className="wl-top"><div className="brand"><BrandMark /><span className="brand-name">batea</span></div></header>
-      <main className="su-body">
-        <div className="su-head">
-          <h1>Bienvenido a Batea</h1>
-          <p>Elegí qué querés traer. No se importa, no se busca y no se analiza nada hasta que lo confirmes.</p>
-        </div>
-        <section className="su-group">
-          <span className="eyebrow">Tu librería de rekordbox</span>
-          <Option kind="check" on={plan.rekordbox} disabled={!rbFound} onSelect={() => setPlan({ ...plan, rekordbox: !plan.rekordbox })} title="Importar mi librería">
-            {rbFound ? 'Encontré rekordbox en esta Mac. Se lee una copia de su base: temas, playlists e historial. Nunca se modifica.' : 'No encontré rekordbox en esta Mac. Si lo instalás después, podés importarlo desde «Analizar e importar».'}
-          </Option>
-        </section>
-        <section className="su-group">
-          <span className="eyebrow">Música que todavía no pasó por rekordbox</span>
-          <Option on={plan.search === 'none'} onSelect={() => setPlan({ ...plan, search: 'none' })} title="Más tarde">Lo busco yo cuando quiera, desde «Analizar e importar».</Option>
-          <Option on={plan.search === 'all'} onSelect={() => setPlan({ ...plan, search: 'all' })} title="Buscar en mi Mac y mis discos">
-            Recorre tu carpeta personal y los discos conectados, y vuelve a mirar al abrir y al enchufar un disco. Solo lee. macOS va a pedir permisos.
-          </Option>
-          <Option on={plan.search === 'folder'} onSelect={() => (plan.path ? setPlan({ ...plan, search: 'folder' }) : void pickFolder())} title="Solo una carpeta">
-            {plan.path ? <><code>{plan.path}</code> <span role="link" tabIndex={0} className="wl-link" onClick={(e) => { e.stopPropagation(); void pickFolder() }}>cambiar</span></> : 'Elegís una carpeta y no busco en ningún otro lado.'}
-          </Option>
-        </section>
-        <div className="su-foot">
-          <span className="faint">El análisis (BPM, tono, energía) nunca es automático: lo pedís vos, de a un tema por vez.</span>
-          <button className="btn primary wl-cta" onClick={onStart} disabled={busy || (plan.search === 'folder' && !plan.path)}>{nothing ? 'Entrar sin importar nada' : 'Empezar'}</button>
-        </div>
-      </main>
+      {confirming ? (
+        <main className="su-body" onKeyDown={(e) => { if (e.key === 'Escape' && !busy) setConfirming(false) }}>
+          <div className="su-group su-confirm">
+            <div className="su-head">
+              <h1>¿Entrar sin importar nada?</h1>
+              <p>Bateas, Mapa y Sugerencias van a estar vacías hasta que traigas tu música. Podés hacerlo cuando quieras desde Fuentes, en la barra lateral.</p>
+            </div>
+            <div className="wl-cta-row">
+              <button className="btn ghost" autoFocus disabled={busy} onClick={() => setConfirming(false)}>Volver</button>
+              <button className="btn primary wl-cta" disabled={busy} onClick={() => onStart(plan)}>Entrar igual</button>
+            </div>
+          </div>
+        </main>
+      ) : (
+        <main className="su-body">
+          <div className="su-head">
+            <h1>Bienvenido a Batea</h1>
+            <p>Elegí qué querés traer. No se importa, no se busca y no se analiza nada hasta que lo confirmes.</p>
+          </div>
+          <section className="su-group" aria-labelledby="su-programs">
+            <div className="su-group-head">
+              <span className="eyebrow" id="su-programs">¿Qué programas usás?</span>
+              <span className="faint">Se pueden marcar varios</span>
+            </div>
+            <div className="su-programs">
+              {sources.map((source) => {
+                const on = selected.includes(source.kind)
+                return (
+                  <div key={source.kind} className="su-option">
+                    <Option kind="check" on={on} disabled={!source.found || locked} onSelect={() => setChoices((prev) => ({ ...prev, [source.kind]: !on }))} title={sourceName(source)}>
+                      {source.found
+                        ? <>{source.detail || (source.track_count ? `${source.track_count.toLocaleString('es-AR')} temas` : 'Encontrado')}{source.app_running && ' · está abierto: se leen los datos del último guardado'}</>
+                        : 'No lo encontré en esta Mac'}
+                    </Option>
+                    {!source.found && <button className="wl-link" disabled={locked} onClick={() => void locate(source)}>Está en otra carpeta…</button>}
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+          <section className="su-group" role="radiogroup" aria-labelledby="su-music">
+            <span className="eyebrow" id="su-music">Tu propia música (archivos que no están en ningún programa)</span>
+            <Option on={search === 'none'} disabled={locked} onSelect={() => setSearch('none')} title="Más tarde">Lo busco yo cuando quiera, desde «Analizar e importar».</Option>
+            <Option on={search === 'all'} disabled={locked} onSelect={() => setSearch('all')} title="Buscar en mi Mac y mis discos">
+              Recorre tu carpeta personal y los discos conectados, y vuelve a mirar al abrir y al enchufar un disco. Solo lee. macOS va a pedir permisos.
+            </Option>
+            <div className="su-option">
+              <Option on={search === 'folder'} disabled={locked} onSelect={() => (path ? setSearch('folder') : void pickFolder())} title="Solo una carpeta">
+                {path ? <code>{path}</code> : 'Elegís una carpeta y no busco en ningún otro lado.'}
+              </Option>
+              {path && <button className="wl-link" disabled={locked} onClick={() => void pickFolder()}>Cambiar</button>}
+            </div>
+          </section>
+          <div className="su-foot">
+            <span className="faint">El análisis (BPM, tono, energía) nunca es automático: lo pedís vos, de a un tema por vez.</span>
+            <button className="btn primary wl-cta" disabled={locked || (search === 'folder' && !path)} onClick={() => nothing ? setConfirming(true) : onStart(plan)}>
+              {nothing ? 'Entrar sin importar nada' : 'Empezar'}
+            </button>
+          </div>
+        </main>
+      )}
     </div>
   )
 }
 
 // ------------------------------------------------------------------ progreso de la carga
-interface Load {
-  phase: 'waiting' | 'sync' | 'discover' | 'done'
-  job: Job | null
-  tracks: number
-  local: number
-  syncSeen: boolean
-  discoverSeen: boolean
+interface Run {
+  plan: SetupPlan
+  jobs: Job[]
+  existingJobs: Set<string>
+  startedAt: number
 }
 
-const INITIAL: Load = { phase: 'waiting', job: null, tracks: 0, local: 0, syncSeen: false, discoverSeen: false }
+interface Load {
+  jobs: Job[]
+  tracks: number
+  local: number
+  done: boolean
+}
 
-/** Vista previa para diseño y pruebas: #demo=ask | waiting | sync | discover | done | empty */
+const INITIAL: Load = { jobs: [], tracks: 0, local: 0, done: false }
+
+const DEMO_PLAN: SetupPlan = { sources: ['rekordbox', 'traktor', 'serato'], search: 'all', path: null }
+
 function demoLoad(kind: string): Load {
-  const job = (label: string, message: string, progress: number): Job => ({ id: 'demo', kind: 'demo', label, status: 'running', progress, message, result: {} })
+  const job = (kind: string, message: string, progress: number, status: Job['status'] = 'running'): Job => ({ id: kind, kind, label: kind, status, progress, message, result: {} })
+  const synced = DEMO_PLAN.sources.map((source) => job(`sync:${source}`, '', 1, 'done'))
   switch (kind) {
-    case 'sync': return { ...INITIAL, phase: 'sync', job: job('Sincronizando con rekordbox', 'Temas 8.420/18.230', 0.2), tracks: 8420, syncSeen: true }
-    case 'discover': return { ...INITIAL, phase: 'discover', job: job('Buscando música nueva', 'Recorriendo PortableSSD…', 0.55), tracks: 18230, local: 126, syncSeen: true, discoverSeen: true }
-    case 'done': return { ...INITIAL, phase: 'done', tracks: 18356, local: 126, syncSeen: true, discoverSeen: true }
-    case 'empty': return { ...INITIAL, phase: 'done', tracks: 0 }
+    case 'sync': return { ...INITIAL, jobs: [synced[0], job('sync:traktor', 'Leyendo playlists…', 0.2)], tracks: 8420 }
+    case 'discover': return { ...INITIAL, jobs: [...synced, job('discover', 'Recorriendo el disco…', 0.55)], tracks: 18230, local: 126 }
+    case 'done': return { ...INITIAL, jobs: [...synced, job('discover', '', 1, 'done')], tracks: 18356, local: 126, done: true }
+    case 'empty': return { ...INITIAL, done: true }
     default: return INITIAL
   }
 }
 
-/** Sigue el avance de lo que la persona eligió. Termina cuando lo elegido ya corrió y no queda nada en marcha
- *  (la búsqueda automática arranca unos segundos después de la importación de rekordbox). */
-function useLoading(active: boolean, plan: Plan, demo: string | null): Load {
-  const [load, setLoad] = useState<Load>(() => (demo ? demoLoad(demo) : INITIAL))
+/** Sigue los jobs que devolvió setup y la búsqueda automática si se inicia más tarde. */
+function useLoading(run: Run | null, demo: string | null): Load {
+  const [load, setLoad] = useState<Load>(() => demo ? demoLoad(demo) : INITIAL)
   useEffect(() => {
-    if (!active || demo) return
+    if (!run || demo) return
     let alive = true
-    const t0 = Date.now()
+    let timer: number
     let idleSince: number | null = null
-    const expectSync = plan.rekordbox
-    const expectDisc = plan.search !== 'none'
+    const tracked = new Map(run.jobs.map((job) => [job.id, job]))
     const tick = async () => {
       try {
-        const [st, jobs] = await Promise.all([api.status(), api.jobs()])
+        const [status, jobs] = await Promise.all([api.status(), api.jobs()])
         if (!alive) return
-        const sync = jobs.find((j) => j.kind === 'sync' && j.status === 'running') ?? null
-        const disc = jobs.find((j) => j.kind === 'discover' && j.status === 'running') ?? null
-        const syncSeen = jobs.some((j) => j.kind === 'sync') || !!st.last_sync
-        const discoverSeen = jobs.some((j) => j.kind === 'discover')
+        for (const job of jobs) {
+          if (tracked.has(job.id) || (job.kind === 'discover' && run.plan.search === 'all' && !run.existingJobs.has(job.id))) {
+            tracked.set(job.id, job)
+          }
+        }
+        const current = [...tracked.values()]
         const now = Date.now()
-        if (sync || disc) idleSince = null
-        else if (idleSince === null) idleSince = now
-        const idle = idleSince === null ? 0 : now - idleSince
-        const done = !sync && !disc && now - t0 > 1500 && (!expectSync || syncSeen) && (!expectDisc || discoverSeen || idle > 9000)
-        setLoad({ phase: done ? 'done' : sync ? 'sync' : disc ? 'discover' : 'waiting', job: sync ?? disc, tracks: st.library_tracks, local: st.local, syncSeen, discoverSeen })
+        const active = current.some(isActiveJob)
+        idleSince = active ? null : idleSince ?? now
+        const waitForDiscovery = run.plan.search === 'all' && !current.some((job) => job.kind === 'discover')
+          && (idleSince === null || now - idleSince < 9000)
+        const done = !active && !waitForDiscovery && now - run.startedAt >= 1500
+        setLoad({ jobs: current, tracks: status.library_tracks, local: status.local, done })
+        if (done) return
       } catch { /* el motor puede estar ocupado: se reintenta */ }
+      if (alive) timer = window.setTimeout(tick, 1000)
     }
     void tick()
-    const iv = window.setInterval(tick, 1000)
-    return () => { alive = false; window.clearInterval(iv) }
-  }, [active, demo, plan.rekordbox, plan.search])
+    return () => { alive = false; window.clearTimeout(timer) }
+  }, [run, demo])
   return load
 }
 
-function Step({ state, children }: { state: 'todo' | 'now' | 'done'; children: ReactNode }) {
+function Step({ job, done, children }: { job?: Job; done: boolean; children: ReactNode }) {
+  const state = job?.status === 'error' || (!job && done) ? 'error'
+    : job?.status === 'done' ? 'done'
+      : job?.status === 'running' && !isQueuedJob(job) ? 'now' : 'todo'
   return (
-    <li className={`wl-step ${state}`}>
-      <span className="ic">{state === 'done' ? <IconCheck size={11} /> : state === 'now' ? <i className="wl-spin" /> : ''}</span>
-      {children}
+    <li className={`wl-step ${state}`} title={state === 'error' ? job?.message : undefined}>
+      <span className="ic" aria-hidden>{state === 'done' ? <IconCheck size={11} /> : state === 'now' ? <i className="wl-spin" /> : state === 'error' ? '!' : ''}</span>
+      <span>{children}{state === 'error' && (job ? ' · falló' : ' · no se inició')}</span>
     </li>
   )
 }
 
-function LoadingPanel({ load, plan, finish }: { load: Load; plan: Plan; finish: (to?: 'inbox') => void }) {
-  const done = load.phase === 'done'
-  const empty = done && load.tracks === 0
+function LoadingPanel({ load, plan, finish }: { load: Load; plan: SetupPlan; finish: (to?: 'inbox') => void }) {
+  const { done, jobs, tracks, local } = load
+  const empty = done && tracks === 0
+  const sourceSteps = plan.sources.map((kind) => ({ kind, job: jobs.find((job) => syncJobSource(job) === kind) }))
+  const discover = jobs.find((job) => job.kind === 'discover')
+  const active = jobs.find((job) => job.status === 'running' && !isQueuedJob(job))
+  const activeSource = active && syncJobSource(active)
+  const failed = done && (sourceSteps.some(({ job }) => job?.status !== 'done') || (plan.search !== 'none' && discover?.status !== 'done'))
   const fmt = (n: number) => n.toLocaleString('es-AR')
   let title = 'Preparando todo…'
   let sub = 'Arrancando lo que elegiste.'
-  if (load.phase === 'sync') { title = 'Importando tu librería de rekordbox'; sub = load.job?.message || 'Leyendo temas, playlists e historial…' }
-  if (load.phase === 'discover') { title = 'Buscando música en tu Mac y tus discos'; sub = load.job?.message || 'Recorriendo carpetas…' }
+  if (activeSource) { title = `Importando tu librería de ${sourceLabel(activeSource)}`; sub = active?.message || 'Leyendo la librería…' }
+  if (active?.kind === 'discover') { title = 'Buscando música propia'; sub = active.message || 'Recorriendo carpetas…' }
   if (done) {
-    title = empty ? 'Batea quedó vacía, por ahora' : 'Tu librería está lista'
-    sub = empty
-      ? 'No trajiste nada todavía. Cuando quieras: arrastrá una carpeta a la ventana o usá «Analizar e importar».'
-      : `${fmt(load.tracks)} temas${load.local ? `, ${fmt(load.local)} de ellos fuera de rekordbox` : ''}.`
+    title = failed ? 'Quedaron pasos pendientes' : empty ? 'Batea quedó vacía, por ahora' : 'Tu librería está lista'
+    sub = failed
+      ? 'Podés volver a intentarlo desde Fuentes o desde «Analizar e importar».'
+      : empty
+        ? 'Podés traer música desde Fuentes o «Analizar e importar».'
+        : `${fmt(tracks)} temas${local ? `, ${fmt(local)} fuera de tus programas` : ''}.`
   }
-  const progress = load.job && !done ? load.job.progress : done ? 1 : 0
-  const stepState = (seen: boolean, phase: 'sync' | 'discover') => (load.phase === phase ? 'now' : seen || done ? 'done' : 'todo')
+  const progress = done ? 1 : active?.progress ?? 0
   return (
     <div className={`wl-load${done ? ' done' : ''}${empty ? ' nothing' : ''}`}>
       <div className="wl-load-main">
         <div className="wl-load-h">
-          <span className="wl-load-ic">{empty ? <IconFolder size={15} /> : done ? <IconCheck size={15} /> : <i className="wl-spin big" />}</span>
+          <span className="wl-load-ic">{failed || empty ? <IconFolder size={15} /> : done ? <IconCheck size={15} /> : <i className="wl-spin big" />}</span>
           <div>
             <b>{title}</b>
             <span className="muted">{sub}</span>
           </div>
         </div>
-        <div className={`wl-bar${!done && !load.job ? ' indet' : ''}`}><i style={{ width: `${Math.max(2, progress * 100)}%` }} /></div>
+        <div className={`wl-bar${!done && !active ? ' indet' : ''}`}><i style={{ width: `${Math.max(2, progress * 100)}%` }} /></div>
         <ul className="wl-steps">
-          {plan.rekordbox && <Step state={stepState(load.syncSeen && load.phase !== 'sync', 'sync')}>Leer rekordbox (solo lectura)</Step>}
-          {plan.search !== 'none' && <Step state={stepState(load.discoverSeen && load.phase !== 'discover', 'discover')}>{plan.search === 'folder' ? 'Revisar la carpeta que elegiste' : 'Buscar música en tu Mac y tus discos'}</Step>}
+          {sourceSteps.map(({ kind, job }) => <Step key={kind} job={job} done={done}>Leer {sourceLabel(kind)} (solo lectura)</Step>)}
+          {plan.search !== 'none' && <Step job={discover} done={done}>{plan.search === 'folder' ? 'Revisar la carpeta que elegiste' : 'Buscar música propia'}</Step>}
         </ul>
-        {load.phase === 'discover' && plan.search === 'all' && <p className="wl-hint">Si macOS pide permiso para leer carpetas o discos, aceptá: Batea solo lee.</p>}
+        {active?.kind === 'discover' && plan.search === 'all' && <p className="wl-hint">Si macOS pide permiso para leer carpetas o discos, aceptá. Batea solo lee.</p>}
       </div>
       <div className="wl-load-side">
-        <div className="wl-count"><b className="num">{fmt(load.tracks)}</b><span>temas</span></div>
+        <div className="wl-count"><b className="num">{fmt(tracks)}</b><span>temas</span></div>
         {done && !empty && <button className="btn primary wl-cta" onClick={() => finish()}>Entrar a Batea</button>}
         {empty && (
           <div className="wl-cta-row">
@@ -468,12 +553,11 @@ export function Welcome({ mode }: { mode: 'first' | 'replay' }) {
   const [index, setIndex] = useState(params.slide !== null ? ((params.slide % n) + n) % n : 0)
   const [elapsed, setElapsed] = useState(0)
   const [playing, setPlaying] = useState(params.slide === null)
-  const rbFound = status?.rekordbox_found ?? false
-  const [plan, setPlan] = useState<Plan>({ rekordbox: rbFound, search: 'none', path: null })
-  const [stage, setStage] = useState<'ask' | 'run'>(params.demo && params.demo !== 'ask' ? 'run' : 'ask')
+  const [run, setRun] = useState<Run | null>(null)
+  const demo = params.demo && params.demo !== 'ask' ? params.demo : null
   const [busy, setBusy] = useState(false)
-  const asking = mode === 'first' && stage === 'ask'
-  const load = useLoading(mode === 'first' && stage === 'run', plan, params.demo)
+  const asking = mode === 'first' && !run && !demo
+  const load = useLoading(run, demo)
 
   const show = useCallback((i: number) => { setIndex(((i % n) + n) % n); setElapsed(0) }, [n])
 
@@ -493,18 +577,26 @@ export function Welcome({ mode }: { mode: 'first' | 'replay' }) {
     go(to ?? 'home')
   }, [mode, setWelcome, loadMeta, bump, go])
 
-  const begin = useCallback(async () => {
+  const begin = async (plan: SetupPlan) => {
     setBusy(true)
     try {
-      const r = await api.setup({ rekordbox: plan.rekordbox, search: plan.search, path: plan.path })
-      if (!plan.rekordbox && plan.search === 'none') { await finish(); return }   // no eligió traer nada: directo a la app
-      for (const j of [r.sync, r.discover]) if (j) trackJob(j)
+      const startedAt = Date.now()
+      const before = plan.search === 'all' ? await api.jobs().catch(() => status?.jobs ?? []) : []
+      const result = await (status?.sources ? api.setup(plan) : api.setupLegacy(plan))
+      if (plan.sources.length === 0 && plan.search === 'none') { await finish(); return }
+      const jobsById = new Map<string, Job>()
+      for (const job of [...(result.jobs ?? []), result.sync, result.discover]) {
+        if (job) jobsById.set(job.id, job)
+      }
+      const jobs = [...jobsById.values()]
+      for (const job of jobs) trackJob(job)
       setElapsed(0)
-      setStage('run')                                                          // recién ahora aparecen las diapositivas
-    } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
-  }, [plan, trackJob, toast, finish])
+      setRun({ plan, jobs, existingJobs: new Set(before.map((job) => job.id)), startedAt })
+    } catch (error) { toast((error as Error).message, 'error') } finally { setBusy(false) }
+  }
 
   useEffect(() => {
+    if (asking) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') show(index + 1)
       else if (e.key === 'ArrowLeft') show(index - 1)
@@ -512,9 +604,9 @@ export function Welcome({ mode }: { mode: 'first' | 'replay' }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [index, show, mode, finish])
+  }, [asking, index, show, mode, finish])
 
-  if (asking) return <SetupScreen rbFound={rbFound} plan={plan} setPlan={setPlan} onStart={() => void begin()} busy={busy} />
+  if (asking) return <SetupScreen onStart={(plan) => void begin(plan)} busy={busy} />
 
   const slide = SLIDES[index]
   return (
@@ -549,7 +641,7 @@ export function Welcome({ mode }: { mode: 'first' | 'replay' }) {
       <footer className="wl-foot">
         {mode === 'replay'
           ? <div className="wl-replay muted">Podés volver a ver esta presentación cuando quieras desde la barra lateral.</div>
-          : <LoadingPanel load={load} plan={plan} finish={(to) => void finish(to)} />}
+          : <LoadingPanel load={load} plan={run?.plan ?? (demo === 'empty' ? { sources: [], search: 'none', path: null } : DEMO_PLAN)} finish={(to) => void finish(to)} />}
       </footer>
     </div>
   )

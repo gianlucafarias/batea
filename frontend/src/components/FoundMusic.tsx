@@ -129,14 +129,14 @@ export function FoundMusic() {
   return (
     <div className="card">
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-        <h3>Música fuera de rekordbox</h3>
+        <h3>Música propia</h3>
         <span className="muted num">{total.toLocaleString('es-AR')} {total === 1 ? 'tema' : 'temas'}</span>
         <div style={{ flex: 1 }} />
         <button className="btn" onClick={pick}><IconFolder size={14} /> Traer una carpeta…</button>
         <button className="btn primary" disabled={!!searching} onClick={() => search()}><IconSync size={14} /> Buscar ahora</button>
       </div>
       <p>
-        Temas de 2 minutos o más en tu Mac{disks.length ? ` y en ${disks.join(', ')}` : ' y tus discos'}. Saltea samples y loops, y lo que ya está en rekordbox.
+        Temas de 2 minutos o más en tu Mac{disks.length ? ` y en ${disks.join(', ')}` : ' y tus discos'}. Saltea samples, loops y temas que ya están en tus programas.
         También podés arrastrar archivos o carpetas a la ventana.
       </p>
 

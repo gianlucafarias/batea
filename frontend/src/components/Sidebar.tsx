@@ -1,17 +1,14 @@
 import { useMemo, useState } from 'react'
 import { api } from '../api'
+import { CORE_SOURCES, crateSource, isQueuedJob, isSessionCrate, sourceLabel } from '../sources'
 import { useApp } from '../store'
 import type { Crate } from '../types'
-import { BrandMark, IconChevron, IconCrate, IconExport, IconEye, IconEyeOff, IconInbox, IconMap, IconPlus, IconSync, IconTag } from './icons'
+import { fmtDate } from '../util'
+import { BrandMark, IconChevron, IconCrate, IconExport, IconEye, IconEyeOff, IconInbox, IconMap, IconPlus, IconTag } from './icons'
 import { FolderTree } from './FolderTree'
+import { Sources } from './Sources'
 import { UniverseSwitcher } from './Universe'
 import { useFluidHover } from '../lib/fluidHover'
-
-function fmtSync(s: string | null | undefined) {
-  if (!s) return 'nunca'
-  const d = new Date(s)
-  return d.toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-}
 
 function Tree({ nodes, all, depth, showHidden, empty }: { nodes: Crate[]; all: Crate[]; depth: number; showHidden: boolean; empty: Set<number | string> }) {
   const { crateId, view, go, loadMeta } = useApp()
@@ -22,6 +19,7 @@ function Tree({ nodes, all, depth, showHidden, empty }: { nodes: Crate[]; all: C
         const kids = all.filter((c) => c.parent_id === n.id)
         const isFolder = n.kind === 'folder' || n.kind === 'session_folder'
         const isOpen = open[n.id] ?? false
+        const activate = () => isFolder ? setOpen({ ...open, [n.id]: !isOpen }) : go('crate', String(n.id))
         return (
           <div key={n.id}>
             <div
@@ -30,15 +28,22 @@ function Tree({ nodes, all, depth, showHidden, empty }: { nodes: Crate[]; all: C
               data-fh
               className={`tree-row${view === 'crate' && crateId === String(n.id) ? ' on' : ''}${n.hidden ? ' hidden-crate' : ''}`}
               style={{ paddingLeft: 10 + depth * 12 }}
-              onClick={() => (isFolder ? setOpen({ ...open, [n.id]: !isOpen }) : go('crate', String(n.id)))}
+              aria-expanded={isFolder ? isOpen : undefined}
+              onClick={activate}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+                e.preventDefault()
+                activate()
+              }}
               onDoubleClick={() => isFolder && go('crate', String(n.id))}
             >
               {isFolder ? <IconChevron size={12} className={`caret${isOpen ? ' open' : ''}`} /> : <span style={{ width: 12 }} />}
-              <span className="ellipsis">{n.name}</span>
+              <span className="ellipsis" title={n.kind === 'session' && n.date ? n.date : undefined}>{n.name}</span>
+              {n.kind === 'session' && n.date && !n.name.includes(n.date) && <span className="tree-date num faint">{fmtDate(n.date)}</span>}
               {!isFolder && <span className="count">{n.count}</span>}
               <button
                 className="eye"
-                title={n.hidden ? 'Mostrar' : 'Ocultar de Batea (no toca rekordbox)'}
+                title={n.hidden ? 'Mostrar' : 'Ocultar de Batea'}
                 aria-label={n.hidden ? `Mostrar ${n.name}` : `Ocultar ${n.name} de Batea`}
                 onClick={async (e) => { e.stopPropagation(); await api.patchCrate(n.id, { hidden: !n.hidden }); loadMeta() }}
               >
@@ -53,21 +58,68 @@ function Tree({ nodes, all, depth, showHidden, empty }: { nodes: Crate[]; all: C
   )
 }
 
-export function Sidebar() {
-  const { view, crateId, go, crates, virtualCrates, jobs, status, trackJob, toast, setExportOpen, setAgentsOpen, loadMeta, openTagger, update } = useApp()
+function ProgramTree({ kind, crates, empty }: { kind: string; crates: Crate[]; empty: Set<number | string> }) {
   const [showHidden, setShowHidden] = useState(false)
   const [showSessions, setShowSessions] = useState(false)
+  const playlists = crates.filter((crate) => !isSessionCrate(crate))
+  const sessions = crates.filter(isSessionCrate)
+  const roots = playlists.filter((crate) => crate.parent_id == null)
+  const sessionIds = new Set(sessions.map((crate) => crate.id))
+  const sessionRoots = sessions
+    .filter((crate) => crate.parent_id == null || !sessionIds.has(crate.parent_id))
+    .sort((a, b) => b.name.localeCompare(a.name))
+  const hiddenCount = crates.filter((crate) => crate.hidden).length
+
+  return (
+    <>
+      <div className="side-h">
+        <span className="eyebrow">{sourceLabel(kind)}</span>
+        {hiddenCount > 0 && (
+          <button className="faint" style={{ fontSize: 11 }} onClick={() => setShowHidden(!showHidden)}>
+            {showHidden ? 'ocultar' : `+${hiddenCount} ocultas`}
+          </button>
+        )}
+      </div>
+      <Tree nodes={roots} all={playlists} depth={0} showHidden={showHidden} empty={empty} />
+      {sessionRoots.length > 0 && (
+        <>
+          <div className="side-h side-history">
+            <button className="eyebrow" aria-expanded={showSessions} onClick={() => setShowSessions(!showSessions)}>
+              Historial de sesiones {showSessions ? '−' : '+'}
+            </button>
+          </div>
+          {showSessions && <Tree nodes={sessionRoots} all={sessions} depth={0} showHidden={showHidden} empty={empty} />}
+        </>
+      )}
+    </>
+  )
+}
+
+export function Sidebar() {
+  const { view, crateId, go, crates, virtualCrates, jobs, status, toast, setExportOpen, setAgentsOpen, loadMeta, openTagger, update } = useApp()
   const [showFolders, setShowFolders] = useState(true)
   const navHover = useFluidHover<HTMLElement>()
   const listHover = useFluidHover<HTMLDivElement>()
 
   const mine = crates.filter((c) => c.kind === 'user' || c.kind === 'smart')
-  const rbRoots = useMemo(() => crates.filter((c) => ['folder', 'playlist', 'smart_rb'].includes(c.kind) && !c.parent_id), [crates])
-  const rbAll = useMemo(() => crates.filter((c) => ['folder', 'playlist', 'smart_rb'].includes(c.kind)), [crates])
-  const sesRoots = useMemo(() => crates.filter((c) => ['session_folder', 'session'].includes(c.kind) && !c.parent_id), [crates])
-  const sesAll = useMemo(() => crates.filter((c) => ['session_folder', 'session'].includes(c.kind)), [crates])
-  const running = jobs.filter((j) => j.status === 'running')
-  const hiddenCount = crates.filter((c) => c.hidden).length
+  const programs = useMemo(() => {
+    const bySource = new Map<string, Crate[]>()
+    for (const crate of crates) {
+      const kind = crateSource(crate)
+      if (!kind || kind === 'user') continue
+      const group = bySource.get(kind)
+      if (group) group.push(crate)
+      else bySource.set(kind, [crate])
+    }
+    return [...bySource].sort(([a], [b]) => {
+      const index = (source: string) => {
+        const i = CORE_SOURCES.findIndex((kind) => kind === source)
+        return i === -1 ? CORE_SOURCES.length : i
+      }
+      return index(a) - index(b)
+    })
+  }, [crates])
+  const running = jobs.filter((j) => j.status === 'running' && !isQueuedJob(j))
 
   // Con un universo activo, las cajas (y carpetas) que quedan vacías no se muestran
   const empty = useMemo(() => {
@@ -146,43 +198,26 @@ export function Sidebar() {
         </div>
         {showFolders && <FolderTree />}
 
-        <div className="side-h">
-          <span className="eyebrow">rekordbox</span>
-          {hiddenCount > 0 && (
-            <button className="faint" style={{ fontSize: 11 }} onClick={() => setShowHidden(!showHidden)}>
-              {showHidden ? 'ocultar' : `+${hiddenCount} ocultas`}
-            </button>
-          )}
-        </div>
-        <Tree nodes={rbRoots} all={rbAll} depth={0} showHidden={showHidden} empty={empty} />
-
-        <div className="side-h">
-          <button className="eyebrow" onClick={() => setShowSessions(!showSessions)}>Historial de sesiones {showSessions ? '−' : '+'}</button>
-        </div>
-        {showSessions && <Tree nodes={[...sesRoots].sort((a, b) => b.name.localeCompare(a.name))} all={sesAll} depth={0} showHidden={showHidden} empty={empty} />}
+        {programs.map(([kind, group]) => <ProgramTree key={kind} kind={kind} crates={group} empty={empty} />)}
       </div>
 
       <div className="side-foot">
-        {running.map((j) => (
-          <div className="job" key={j.id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-              <b className="ellipsis">{j.label}</b>
-              {['keys', 'analyze', 'discover'].includes(j.kind) && <button className="faint" onClick={() => api.cancelJob(j.id)}>detener</button>}
-            </div>
-            <div className="muted ellipsis">{j.message}</div>
-            <div className="bar"><i style={{ ['--p' as string]: j.progress }} /></div>
+        {running.length > 0 && (
+          <div className="side-jobs">
+            {running.map((j) => (
+              <div className="job" key={j.id}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <b className="ellipsis">{j.label}</b>
+                  {['keys', 'analyze', 'discover'].includes(j.kind) && <button className="faint" onClick={() => api.cancelJob(j.id)}>detener</button>}
+                </div>
+                <div className="muted ellipsis">{j.message}</div>
+                <div className="bar"><i style={{ ['--p' as string]: j.progress }} /></div>
+              </div>
+            ))}
           </div>
-        ))}
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            className="btn sm"
-            style={{ flex: 1 }}
-            disabled={!status?.rekordbox_found || running.some((j) => j.kind === 'sync')}
-            onClick={async () => { try { trackJob(await api.sync()) } catch (e) { toast(String((e as Error).message), 'error') } }}
-            title={`Última: ${fmtSync(status?.last_sync)}`}
-          >
-            <IconSync size={14} /> Sincronizar
-          </button>
+        )}
+        <div className="side-actions">
+          <Sources />
           <button className="btn sm" onClick={() => setExportOpen(true)} title="Exportar a rekordbox (XML)"><IconExport size={14} /> Exportar</button>
         </div>
         <button className="btn sm ghost" onClick={() => setAgentsOpen(true)} title="Usar tu librería desde Claude, Codex, Cursor…">
@@ -196,9 +231,6 @@ export function Sidebar() {
             Hay una versión nueva ({update.latest}) · Descargar
           </button>
         )}
-        <div className="faint" style={{ fontSize: 10.5, padding: '0 2px' }}>
-          rekordbox: {status?.rekordbox_found ? `sincronizado ${fmtSync(status?.last_sync)}` : 'no encontrado'}
-        </div>
       </div>
     </aside>
   )

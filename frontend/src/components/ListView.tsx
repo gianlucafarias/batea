@@ -1,6 +1,7 @@
 import { ArtistLinks } from './Artist'
 import { api } from '../api'
 import { AnalysisBadge } from './Analysis'
+import { SourceBadges } from './SourceBadges'
 import { openTrackMenu } from './TrackMenu'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useMemo, useRef } from 'react'
@@ -81,7 +82,9 @@ export function ListView({ tracks, sort, onSort, multi, onPick }: { tracks: Trac
                 {isCur && playing ? <IconPause size={12} /> : t.online ? <IconPlay size={12} /> : <span className="num faint" style={{ fontSize: 10 }}>{row.index + 1}</span>}
               </button>
               <div className="thumb"><Sleeve id={t.id} title={t.title} trackKey={t.key} hasArt={t.has_art} size="s" px={32} /></div>
-              <div className="cell t tcell" title={t.unanalyzed ? 'Sin analizar' : undefined}><span className="ellipsis">{cleanTitle(t.title)}</span><AnalysisBadge t={t} /></div>
+              <div className="cell t tcell" title={t.unanalyzed ? 'Sin analizar' : undefined}>
+                <span className="ellipsis">{cleanTitle(t.title)}</span><AnalysisBadge t={t} /><SourceBadges sources={t.sources} />
+              </div>
               <div className="cell muted"><ArtistLinks artist={t.artist} /></div>
               <div className="cell num">{fmtBpm(t.bpm)}</div>
               <div><KeyBadge k={t.key} est={!!t.key_est} /></div>

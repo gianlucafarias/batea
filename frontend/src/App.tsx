@@ -15,6 +15,7 @@ import { Splash, Welcome } from './components/Welcome'
 import { UpdateScreen } from './components/Update'
 import { api } from './api'
 import { drainLinks } from './links'
+import { isActiveJob } from './sources'
 import { useApp, usePlayer } from './store'
 import { spring, usePresence } from './lib/motion'
 
@@ -41,7 +42,7 @@ export default function App() {
         const st = useApp.getState().status
         // primera vez: se le pregunta qué traer (nada se importa ni se busca antes de que lo confirme)
         useApp.setState({ booted: true, welcome: st && !st.welcome_done && st.library_tracks === 0 ? 'first' : null })
-        for (const j of st?.jobs ?? []) if (j.status === 'running') trackJob(j)
+        for (const j of st?.jobs ?? []) if (isActiveJob(j)) trackJob(j)
       })
       .catch(() => useApp.setState({ bootError: true }))
   }, [loadMeta, trackJob])
@@ -60,7 +61,7 @@ export default function App() {
       e.preventDefault(); depth = 0; setDragging(false)
       if (!window.pywebview) { useApp.getState().toast('Arrastrar archivos funciona dentro de la app de Batea', 'error'); return }
       // el motor ya empezó a traerlos: lo seguimos enseguida
-      setTimeout(async () => { for (const j of await api.jobs()) if (j.status === 'running') useApp.getState().trackJob(j) }, 700)
+      setTimeout(async () => { for (const j of await api.jobs()) if (isActiveJob(j)) useApp.getState().trackJob(j) }, 700)
       useApp.getState().go('inbox')
     }
     window.addEventListener('dragenter', enter); window.addEventListener('dragleave', leave)
@@ -75,7 +76,7 @@ export default function App() {
   useEffect(() => {
     const iv = window.setInterval(async () => {
       try {
-        for (const j of await api.jobs()) if (j.status === 'running') useApp.getState().trackJob(j)
+        for (const j of await api.jobs()) if (isActiveJob(j)) useApp.getState().trackJob(j)
       } catch { /* el motor puede estar reiniciando */ }
       void drainLinks()
     }, 4000)
@@ -96,7 +97,11 @@ export default function App() {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (useApp.getState().mix) return        // el laboratorio de mezcla maneja su propio teclado
-      if (e.code === 'Space') { e.preventDefault(); usePlayer.getState().toggle() }
+      const button = e.target instanceof Element && e.target.closest('button, [role="button"]')
+      if (e.code === 'Space' && !e.defaultPrevented && !button) {
+        e.preventDefault()
+        usePlayer.getState().toggle()
+      }
       if (e.key === 'Escape') useApp.getState().select(null)
       if (e.metaKey && e.key === '[') { e.preventDefault(); useApp.getState().goBack() }
     }
@@ -115,7 +120,7 @@ export default function App() {
 
   if (update?.must_update) return <UpdateScreen info={update} />
   if (!booted) return <Splash error={bootError} onRetry={boot} />
-  if (welcome) return <Welcome mode={welcome} />
+  if (welcome) return <><Welcome mode={welcome} /><Toasts /></>
 
   return (
     <div className="app">
@@ -139,7 +144,7 @@ export default function App() {
       <TrackMenu />
       <EditTrackDialog />
       <Toasts />
-      {dragging && <div className="drop-ov"><div><h2>Soltá para traer a Batea</h2><div className="muted">Temas sueltos o carpetas enteras. Lo que ya está en rekordbox no se duplica.</div></div></div>}
+      {dragging && <div className="drop-ov"><div><h2>Soltá para traer a Batea</h2><div className="muted">Temas sueltos o carpetas enteras. Batea reconoce los temas que ya están en la librería.</div></div></div>}
     </div>
   )
 }

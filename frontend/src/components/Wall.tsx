@@ -1,13 +1,14 @@
 import { ArtistLinks } from './Artist'
 import { openTrackMenu } from './TrackMenu'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp, usePlayer } from '../store'
 import type { Track } from '../types'
 import { cleanTitle, fmtBpm } from '../util'
 import { EnergyMeter, KeyBadge, Sleeve } from './bits'
 import { IconPause, IconPlay } from './icons'
 import type { PickFn } from './ListView'
+import { SourceBadges } from './SourceBadges'
 
 export function Wall({ tracks, multi, onPick }: { tracks: Track[]; multi?: Set<number>; onPick?: PickFn }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -27,7 +28,8 @@ export function Wall({ tracks, multi, onPick }: { tracks: Track[]; multi?: Set<n
   const cols = Math.max(2, Math.floor((width + gap) / (168 + gap)))
   const cell = (width - gap * (cols - 1)) / cols
   const rows = Math.ceil(tracks.length / cols)
-  const rowH = cell + 84
+  const hasSources = useMemo(() => tracks.some((t) => t.sources?.length), [tracks])
+  const rowH = cell + (hasSources ? 104 : 84)
   const v = useVirtualizer({ count: rows, getScrollElement: () => ref.current, estimateSize: () => rowH, overscan: 3 })
   useEffect(() => { v.measure() }, [rowH]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -55,6 +57,7 @@ export function Wall({ tracks, multi, onPick }: { tracks: Track[]; multi?: Set<n
                   <div className="ellipsis muted" style={{ fontSize: 11.5 }}><ArtistLinks artist={t.artist} fallback='—' /></div>
                 </div>
                 <div className="m"><KeyBadge k={t.key} est={!!t.key_est} /><span className="num">{fmtBpm(t.bpm)}</span><span style={{ marginLeft: 'auto' }}><EnergyMeter value={t.energy} auto={!t.energy_user} /></span></div>
+                <SourceBadges sources={t.sources} />
               </button>
             ))}
           </div>

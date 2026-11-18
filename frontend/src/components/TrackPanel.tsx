@@ -1,10 +1,11 @@
 import { ArtistLinks } from './Artist'
 import { AnalysisNotice } from './Analysis'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api } from '../api'
+import { api, isNotFound, type TrackSource } from '../api'
+import { sourceLabel } from '../sources'
 import { useApp, usePlayer } from '../store'
 import type { Recommendation, Relation, Track, TrackDetail } from '../types'
-import { cleanTitle, fmtBpm, fmtDate, fmtTime, keyColor, ROLE_CATEGORIES } from '../util'
+import { cleanTitle, compatibleKeys, fmtBpm, fmtDate, fmtTime, keyColor, ROLE_CATEGORIES } from '../util'
 import { EnergyEditor, KeyBadge, Sleeve, Stars } from './bits'
 import { groupTags } from './FilterBar'
 import { IconFinder, IconLink, IconMix, IconPause, IconPlay, IconPlus, IconSearch, IconThumbDown, IconThumbUp, IconX } from './icons'
@@ -22,6 +23,47 @@ const REL_KINDS: { kind: Relation['kind']; label: string; hint: string }[] = [
 ]
 
 function toTrack(d: TrackDetail): Track { return d }
+
+function SourceAnalysis({ sources }: { sources: TrackSource[] | 'error' }) {
+  if (sources === 'error') return <div className="section"><span className="eyebrow">Analizado en</span><span className="muted">No pude cargar los datos de los programas.</span></div>
+  if (!sources.length) return null
+
+  const tonalities = sources.flatMap((source) => {
+    const camelot = source.key_camelot?.trim().toUpperCase()
+    const tone = camelot || source.key_raw?.trim()
+    return tone ? [{ label: source.label || sourceLabel(source.source), tone, camelot }] : []
+  })
+  const conflicts = tonalities.flatMap((a, index) => tonalities.slice(index + 1).filter((b) => {
+    // Comparamos tonos en el mismo formato para no marcar C#m y 12A como distintos.
+    return Boolean(a.camelot) === Boolean(b.camelot) && a.tone.toLowerCase() !== b.tone.toLowerCase()
+  }).map((b) => [a, b] as const))
+  const conflictingTones = tonalities.filter((tone) => conflicts.some((pair) => pair.includes(tone)))
+  const distant = conflicts.some(([a, b]) => !compatibleKeys(a.camelot).includes(b.camelot ?? ''))
+
+  return (
+    <div className="section">
+      <span className="eyebrow">Analizado en</span>
+      <div className="track-sources">
+        {sources.map((source) => (
+          <div className="track-source" key={source.source}>
+            <b>{source.label || sourceLabel(source.source)}</b>
+            <span className="num muted">{source.bpm ? `${fmtBpm(source.bpm)} BPM` : '—'}</span>
+            <span>{source.key_camelot ? <KeyBadge k={source.key_camelot} /> : source.key_raw || '—'}</span>
+            <span title={source.rating == null ? 'Sin puntaje' : `${source.rating} de 5 estrellas`}>
+              {source.rating == null ? '—' : <Stars value={source.rating} />}
+            </span>
+            <span className="num muted">{source.cues_count == null ? '—' : `${source.cues_count} ${source.cues_count === 1 ? 'cue' : 'cues'}`}</span>
+          </div>
+        ))}
+      </div>
+      {conflictingTones.length > 0 && (
+        <p className={`track-source-conflict${distant ? ' strong' : ''}`}>
+          {conflictingTones.map(({ label, tone }) => `${label} dice ${tone}`).join(', ')}
+        </p>
+      )}
+    </div>
+  )
+}
 
 /** Una sola línea gris debajo del título: artista · 144 BPM · 4A (en su color) · algo más. */
 function Meta({ artist, bpm, k, extra }: { artist?: string | null; bpm?: number | null; k?: string | null; extra?: string | null }) {
@@ -98,6 +140,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
   const { select, tags, crates, patchTrack, toast, askText, loadMeta, go, crateId, openMix, libraryVersion } = useApp()
   const { play, track: cur, playing, time, duration, seek } = usePlayer()
   const [d, setD] = useState<TrackDetail | null>(null)
+  const [sourceAnalysis, setSourceAnalysis] = useState<{ id: number; sources: TrackSource[] | 'error' } | null>(null)
   const [recs, setRecs] = useState<Recommendation[] | null>(null)
   const [picking, setPicking] = useState(false)
   const [recScope, setRecScope] = useState<'all' | 'crate'>('all')
@@ -106,6 +149,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
   const [allRecs, setAllRecs] = useState(false)
   const wave = useWaveform(selectedId)
   const grouped = useMemo(() => groupTags(tags), [tags])
+  const crateIds = useMemo(() => new Set(crates.map((crate) => String(crate.id))), [crates])
   const userCrates = crates.filter((c) => c.kind === 'user')
 
   const load = useCallback(async () => {
@@ -124,6 +168,14 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
   useEffect(() => { setD(null); setPicking(false); setEditTags(false); setAllRecs(false); load().catch(() => select(null)) }, [load, select])
   useEffect(() => { if (libraryVersion) load().catch(() => {}) }, [libraryVersion]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadRecs().catch(() => setRecs([])) }, [loadRecs])
+  useEffect(() => {
+    if (selectedId == null) return
+    let alive = true
+    api.trackSources(selectedId)
+      .then(({ sources }) => { if (alive) setSourceAnalysis({ id: selectedId, sources }) })
+      .catch((error) => { if (alive) setSourceAnalysis({ id: selectedId, sources: isNotFound(error) ? [] : 'error' }) })
+    return () => { alive = false }
+  }, [selectedId, libraryVersion])
   // cuando termina de analizarse este tema, recargar la ficha
   const lastPatch = useApp((s) => s.lastPatch)
   useEffect(() => { if (lastPatch && lastPatch.id === selectedId && 'unanalyzed' in lastPatch) load().catch(() => {}) }, [lastPatch]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -132,6 +184,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
   if (!d) return <aside className="tpanel"><div className="empty">Cargando…</div></aside>
 
   const isCur = cur?.id === d.id
+  const visibleSessions = d.sessions.filter((session) => crateIds.has(String(session.id)))
   const update = async (body: Record<string, unknown>) => {
     const nd = await api.patchTrack(d.id, body)
     setD(nd)
@@ -179,7 +232,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
                 onSeek={(f) => { if (isCur) seek(f * duration); else if (d.online) { play(toTrack(d)); setTimeout(() => usePlayer.getState().seek(f * (d.duration ?? 0)), 250) } }} />
             </div>
           </div>
-          {!d.online && <div className="faint" style={{ fontSize: 11.5 }}>{d.source === 'rekordbox' ? 'El disco con este tema está desconectado' : 'No encuentro el archivo'}</div>}
+          {!d.online && <div className="faint" style={{ fontSize: 11.5 }}>{d.source !== 'local' ? 'El disco con este tema está desconectado' : 'No encuentro el archivo'}</div>}
         </div>
 
         <AnalysisNotice t={d} online={!!d.online} />
@@ -197,6 +250,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
           <div className="section-h"><span className="eyebrow">Puntaje</span><Stars big value={d.rating} onChange={(v) => update({ rating: v })} /></div>
           <EnergyEditor value={d.energy_user} auto={d.energy_auto} onChange={(v) => update(v == null ? { clear_energy: true } : { energy: v })} />
         </div>
+        {sourceAnalysis?.id === d.id && <SourceAnalysis sources={sourceAnalysis.sources} />}
 
         <div className="section">
           <div className="section-h">
@@ -277,7 +331,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
                   </div>
                   <div className="acts">
                     <button className="btn ghost sm icon" title="Probar la mezcla" aria-label="Probar la mezcla" onClick={(e) => { e.stopPropagation(); r.direction === 'in' && kind === 'history' ? openMix(r.other_id, d.id) : openMix(d.id, r.other_id) }}><IconMix size={13} /></button>
-                    {r.source !== 'history' && <button className="btn ghost sm icon" title="Quitar" aria-label="Quitar" onClick={async (e) => { e.stopPropagation(); await api.unrelate(r.id); load(); loadRecs() }}><IconX size={13} /></button>}
+                    {r.kind !== 'history' && !String(r.source ?? '').startsWith('history') && <button className="btn ghost sm icon" title="Quitar" aria-label="Quitar" onClick={async (e) => { e.stopPropagation(); await api.unrelate(r.id); load(); loadRecs() }}><IconX size={13} /></button>}
                   </div>
                 </div>
               ))}
@@ -324,7 +378,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
         <div className="section">
           <span className="eyebrow">Cajas</span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-            {d.crates.map((c) => (
+            {d.crates.filter((c) => crateIds.has(String(c.id))).map((c) => (
               <span key={c.id} className="chip" role="button" onClick={() => go('crate', String(c.id))} style={{ cursor: 'pointer' }}>
                 {c.name}
                 {c.kind === 'user' && <button aria-label={`Quitar de ${c.name}`} onClick={async (e) => { e.stopPropagation(); await api.removeFromCrate(c.id, d.id); load(); loadMeta() }}><IconX size={10} /></button>}
@@ -348,11 +402,11 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
           </div>
         </div>
 
-        {d.sessions.length > 0 && (
+        {visibleSessions.length > 0 && (
           <div className="section">
             <span className="eyebrow">Lo tocaste en</span>
             <div style={{ display: 'grid', gap: 2 }}>
-              {d.sessions.map((s) => (
+              {visibleSessions.map((s) => (
                 <button key={s.id} className="tree-row" onClick={() => go('crate', String(s.id))}>
                   <span className="num muted" style={{ width: 72 }}>{fmtDate(s.date)}</span><span className="ellipsis">{s.name}</span>
                 </button>

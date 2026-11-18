@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { api, audioUrl, type Status, type UpdateInfo } from './api'
+import { api, audioUrl, isNotFound, type LibrarySource, type Status, type UpdateInfo } from './api'
+import { crateSource, isActiveJob } from './sources'
 import type { Crate, Filters, FolderNode, Job, Tag, Track, UniverseList } from './types'
 
 export type View = 'home' | 'crate' | 'map' | 'inbox' | 'tagger'
@@ -26,6 +27,8 @@ interface State {
   toasts: Toast[]
   libraryVersion: number
   exportOpen: boolean
+  sourcesOpen: boolean
+  setSourcesOpen: (v: boolean) => void
   agentsOpen: boolean
   setAgentsOpen: (v: boolean) => void
   ask: { title: string; value: string; resolve: (v: string | null) => void } | null
@@ -56,6 +59,8 @@ interface State {
   go: (v: View, crateId?: string | null) => void
   select: (id: number | null) => void
   loadMeta: () => Promise<void>
+  refreshSources: () => Promise<void>
+  updateSource: (source: LibrarySource) => void
   bump: () => void
   toast: (text: string, tone?: 'ok' | 'error') => void
   setExportOpen: (v: boolean) => void
@@ -63,6 +68,14 @@ interface State {
 }
 
 const tracked = new Set<string>()
+let sourceRevision = 0
+
+async function fetchSources() {
+  try { return (await api.sources()).sources } catch (error) {
+    if (isNotFound(error)) return undefined
+    throw error
+  }
+}
 
 /** Sigue la fila de análisis: cada tema que termina se actualiza en la lista y en el detalle sin recargar todo. */
 async function syncQueue(running: boolean) {
@@ -97,6 +110,8 @@ export const useApp = create<State>((set, get) => ({
   toasts: [],
   libraryVersion: 0,
   exportOpen: false,
+  sourcesOpen: false,
+  setSourcesOpen: (sourcesOpen) => set({ sourcesOpen }),
   agentsOpen: false,
   setAgentsOpen: (agentsOpen) => set({ agentsOpen }),
   ask: null,
@@ -159,10 +174,36 @@ export const useApp = create<State>((set, get) => ({
   go: (view, crateId = null) => set({ view, tagger: null, filterPreset: null, backStack: [], crateId: crateId ?? (view === 'crate' ? get().crateId : null) }),
   select: (selectedId) => set({ selectedId }),
   loadMeta: async () => {
-    const [status, tags, crates, universes, folders] = await Promise.all([
+    const revision = sourceRevision
+    const [status, tags, crates, universes, folders, sources] = await Promise.all([
       api.status(), api.tags(), api.crates(), api.universes(), api.folders().catch(() => get().folders),
+      get().status ? undefined : fetchSources().catch(() => undefined),
     ])
-    set({ status, tags, crates: crates.crates, virtualCrates: crates.virtual, universes, folders })
+    const latestSources = revision === sourceRevision ? sources ?? status.sources ?? get().status?.sources : get().status?.sources
+    const disabled = new Set(latestSources?.filter((source) => !source.enabled).map((source) => source.kind))
+    const visibleCrates = disabled.size ? crates.crates.filter((crate) => !disabled.has(crateSource(crate) ?? '')) : crates.crates
+    set({ status: { ...status, sources: latestSources }, tags, crates: visibleCrates, virtualCrates: crates.virtual, universes, folders })
+  },
+  refreshSources: async () => {
+    const revision = sourceRevision
+    const sources = await fetchSources()
+    if (revision !== sourceRevision || !sources) return
+    set((s) => ({ status: s.status && { ...s.status, sources } }))
+  },
+  updateSource: (source) => {
+    sourceRevision++
+    set((s) => {
+      if (!s.status) return s
+      const sources = s.status.sources ?? []
+      return {
+        status: {
+          ...s.status,
+          sources: sources.some((item) => item.kind === source.kind)
+            ? sources.map((item) => item.kind === source.kind ? source : item)
+            : [...sources, source],
+        },
+      }
+    })
   },
   bump: () => set((s) => ({ libraryVersion: s.libraryVersion + 1 })),
   toast: (text, tone = 'ok') => {
@@ -174,21 +215,22 @@ export const useApp = create<State>((set, get) => ({
   },
   setExportOpen: (exportOpen) => set({ exportOpen }),
   trackJob: (job) => {
-    set((s) => ({ jobs: [job, ...s.jobs.filter((j) => j.id !== job.id)] }))
     if (tracked.has(job.id)) return
     tracked.add(job.id)
+    set((s) => ({ jobs: [job, ...s.jobs.filter((j) => j.id !== job.id)] }))
     const poll = async () => {
-      const all = await api.jobs()
+      const all = await api.jobs().catch(() => null)
+      if (!all) { setTimeout(poll, 700); return }
       const j = all.find((x) => x.id === job.id)
       set({ jobs: all })
       if (job.kind === 'analyze') await syncQueue(j?.status === 'running')
-      if (j && j.status === 'running') {
+      if (j && isActiveJob(j)) {
         setTimeout(poll, 700)
       } else if (j) {
         const quiet = j.kind === 'discover' && !Number(j.result?.nuevos) && !Number(j.result?.movidos)   // búsqueda sin novedades: no molestar
         if (j.status === 'done') { if (!quiet) get().toast(typeof j.result?.mensaje === 'string' ? j.result.mensaje : `${j.label}: listo`) }
         else get().toast(`${j.label}: ${j.message}`, 'error')
-        await get().loadMeta()
+        await get().loadMeta().catch(() => undefined)
         get().bump()
       }
     }
