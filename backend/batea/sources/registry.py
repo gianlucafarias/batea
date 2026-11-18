@@ -23,6 +23,7 @@ from .base import KINDS, LABELS, SHORT
 ADAPTERS = {
     "rekordbox": ("batea.sources.rekordbox", "RekordboxSource"),
     "traktor": ("batea.sources.traktor", "TraktorSource"),
+    "serato": ("batea.sources.serato", "SeratoSource"),
 }
 ALWAYS_LISTED = ("rekordbox", "traktor", "serato")   # el resto (Engine, VirtualDJ) solo aparece si se encuentra
 _env_lock = threading.Lock()
@@ -51,6 +52,9 @@ def adapter(kind: str, path: str | None = None):
     except Exception:  # noqa: BLE001  (falta el archivo o falla al importar: fuente no disponible)
         yield None
         return
+    if path and kind == "serato":
+        yield cls(root=Path(path))
+        return
     if not path or kind != "traktor":
         yield cls()
         return
@@ -72,7 +76,8 @@ def adapter(kind: str, path: str | None = None):
 
 
 def _discover(kind: str, path: str | None):
-    key = (kind, path or "", os.environ.get("BATEA_TRAKTOR_DIR", ""), str(config.RB_DIR))
+    key = (kind, path or "", os.environ.get("BATEA_TRAKTOR_DIR", ""),
+           os.environ.get("BATEA_SERATO_DIR", ""), str(config.RB_DIR))
     hit = _cache.get(key)
     if hit and time.time() - hit[0] < CACHE_S:
         return hit[1]
