@@ -1,13 +1,31 @@
-import { barAt, beatAt, crossfade, type Deck, type Timing, type Transition } from './model'
+import { dbToPos, evaluate, isEq, lanesOf, type Automation, type LaneGroup, type LaneId } from './automation'
+import { barAt, beatAt, type Deck, type Timing, type Transition } from './model'
 import type { Peaks } from './peaks'
 
 export const RULER = 24
-const CROSSFADE_LANE = 30
+const AUTOMATION_LANE = 66
 
 export function lanes(height: number) {
   const middle = (height + RULER) / 2
-  return { aBottom: middle - CROSSFADE_LANE / 2, bTop: middle + CROSSFADE_LANE / 2 }
+  return { aBottom: middle - AUTOMATION_LANE / 2, bTop: middle + AUTOMATION_LANE / 2, middle }
 }
+
+/** Zona vertical de cada curva dentro de la franja del medio: el crossfader la ocupa entera; en el EQ, A arriba y B abajo. */
+export function laneBox(height: number, lane: LaneId) {
+  const { aBottom, bTop, middle } = lanes(height)
+  if (!isEq(lane)) return { top: aBottom + 7, bottom: bTop - 7 }
+  return lane[0] === 'A' ? { top: aBottom + 5, bottom: middle - 3 } : { top: middle + 3, bottom: bTop - 5 }
+}
+
+/** y de un valor: crossfader 0 (A) arriba → 1 (B) abajo; EQ +6 dB arriba, 0 dB al medio, kill abajo. */
+export function valueY(height: number, lane: LaneId, v: number) {
+  const { top, bottom } = laneBox(height, lane)
+  return isEq(lane) ? top + (1 - dbToPos(v)) / 2 * (bottom - top) : top + v * (bottom - top)
+}
+
+export const LANE_COLOR: Record<'x' | 'A' | 'B', string> = { x: '#ff7a45', A: '#ece6dc', B: '#7dd3fc' }
+const laneColor = (lane: LaneId) => LANE_COLOR[lane === 'x' ? 'x' : lane[0] as 'A' | 'B']
+const BAND_NAMES = ['Graves', 'Medios', 'Agudos']
 
 interface Drawing {
   A: Deck
@@ -15,6 +33,9 @@ interface Drawing {
   rate: number
   timing: Timing
   style: Transition
+  automation: Automation
+  group: LaneGroup
+  active: { lane: LaneId; index: number } | null
   peaksA: Peaks | null
   peaksB: Peaks | null
 }
@@ -100,13 +121,12 @@ function grid(
 export function drawTimeline(
   ctx: CanvasRenderingContext2D, width: number, height: number, left: number, span: number, d: Drawing,
 ): number {
-  const { A, B, rate, timing, style, peaksA, peaksB } = d
-  const { mixT, cueT, bStart, bOrigin, durA, endB, fadeEnd } = timing
+  const { A, B, rate, timing, peaksA, peaksB, automation, group, active } = d
+  const { mixT, cueT, bStart, bOrigin, durA, endB } = timing
   const { aBottom, bTop } = lanes(height)
   const dt = span / width
   const xAt = (t: number) => (t - left) / dt
   const tx = xAt(mixT)
-  const swap = mixT + (fadeEnd - mixT) / 2
 
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = '#141311'
@@ -141,39 +161,44 @@ export function drawTimeline(
     ctx.fillText('Termina A', endA + (endA > width - 82 ? -6 : 6), RULER + 18)
   }
 
-  const leftCurve = Math.max(0, Math.floor(xAt(mixT)) - 1)
-  const rightCurve = Math.min(width, Math.ceil(xAt(fadeEnd)) + 1)
-  if (rightCurve > leftCurve) {
-    const top = aBottom + 5, bottom = bTop - 5
+  // curvas de la franja del medio
+  const toAt = (t: number) => (t - mixT) / A.bar
+  ctx.textAlign = 'left'
+  for (const lane of lanesOf(group)) {
+    const { top, bottom } = laneBox(height, lane)
+    const color = laneColor(lane)
+    if (isEq(lane)) {                                   // referencia de 0 dB
+      ctx.fillStyle = '#ece6dc14'
+      ctx.fillRect(0, Math.round(valueY(height, lane, 0)), width, 1)
+    }
+    const points = automation[lane]
     ctx.beginPath()
-    if (style === 'cut' || fadeEnd === mixT) {
-      ctx.moveTo(tx, bottom)
-      ctx.lineTo(tx, top)
-      ctx.lineTo(rightCurve, top)
-    } else {
-      for (let px = leftCurve; px <= rightCurve; px += 2) {
-        const y = bottom - (bottom - top) * crossfade(style, left + px * dt, mixT, fadeEnd)
-        if (px === leftCurve) ctx.moveTo(px, y)
-        else ctx.lineTo(px, y)
-      }
+    for (let px = 0; px <= width; px += 2) {
+      const y = valueY(height, lane, evaluate(points, toAt(left + px * dt)))
+      if (px === 0) ctx.moveTo(px, y)
+      else ctx.lineTo(px, y)
     }
-    ctx.strokeStyle = '#ff7a45'
-    ctx.lineWidth = 1.2
+    ctx.strokeStyle = color
+    ctx.globalAlpha = 0.9
+    ctx.lineWidth = 1.3
     ctx.stroke()
-    if (style === 'bass' && fadeEnd > mixT && xAt(swap) >= 0 && xAt(swap) <= width) {
-      const x = xAt(swap), y = (top + bottom) / 2
+    ctx.globalAlpha = 1
+    ctx.lineWidth = 1
+    points.forEach((p, i) => {
+      const x = xAt(mixT + p.at * A.bar)
+      if (x < -6 || x > width + 6) return
+      const y = valueY(height, lane, p.v)
+      const on = active?.lane === lane && active.index === i
       ctx.beginPath()
-      ctx.moveTo(x, y - 4)
-      ctx.lineTo(x + 4, y)
-      ctx.lineTo(x, y + 4)
-      ctx.lineTo(x - 4, y)
-      ctx.closePath()
-      ctx.fillStyle = '#ff7a45'
+      ctx.arc(x, y, on ? 4.5 : 3.5, 0, Math.PI * 2)
+      ctx.fillStyle = on ? color : '#141311'
       ctx.fill()
-      ctx.textAlign = x > width - 134 ? 'right' : 'left'
-      ctx.fillStyle = '#b8b0a4'
-      ctx.fillText('Cambio de graves', x + (x > width - 134 ? -8 : 8), bottom)
-    }
+      ctx.strokeStyle = color
+      ctx.stroke()
+    })
+    ctx.fillStyle = '#8a8278'
+    const name = lane === 'x' ? 'Crossfader' : `${BAND_NAMES[group as number]} ${lane[0]}`
+    ctx.fillText(name, 8, lane === 'x' || lane[0] === 'A' ? top + 8 : bottom - 1)
   }
   return (detailA ? 1 : 0) | (detailB ? 2 : 0)
 }

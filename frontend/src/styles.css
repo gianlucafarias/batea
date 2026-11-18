@@ -706,6 +706,14 @@ kbd {
   overflow: hidden; cursor: crosshair; touch-action: none; overscroll-behavior: contain;
 }
 .mx-timeline.is-zoomed, .mx-timeline.over-b { cursor: grab; }
+.mx-timeline.over-lane { cursor: copy; }
+.mx-timeline.over-point { cursor: grab; }
+.mx-timeline[data-dragging="point"] { cursor: grabbing; }
+.mx-curve-pick { display: flex; align-items: center; gap: 7px; padding-left: 9px; border-left: 1px solid var(--line-2); }
+.mx-curve-pick > span { color: var(--muted); font-size: 11px; }
+.mx-curve-pick .seg button { height: 23px; padding-inline: 8px; font-size: 11px; }
+.mixlab .mx-knob.is-held .mx-knob-dial { border-color: var(--accent); }
+.mixlab .mx-fader.is-held .mx-fader-cap { border-color: var(--accent); }
 .mx-timeline[data-dragging], .mx-timeline[data-dragging] .mx-marker { cursor: grabbing; }
 .mx-timeline[data-dragging="marker"], .mx-timeline[data-dragging="marker"] .mx-marker { cursor: ew-resize; }
 .mx-timeline canvas { width: 100%; height: 100%; display: block; }

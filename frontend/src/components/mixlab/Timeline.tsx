@@ -1,13 +1,14 @@
-import { memo, useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type PointerEvent, type Ref } from 'react'
+import { memo, useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent, type Ref } from 'react'
 import { Seg } from '../../lib/Seg'
 import { IconMinus, IconPlus } from '../icons'
-import { beatAt, clamp, nearestBar, signed, type Deck, type Placement, type Timing, type Transition } from './model'
+import { lanesOf, posToDb, upsert, type Automation, type LaneGroup, type LaneId, type Point } from './automation'
+import { beatAt, clamp, KILL, nearestBar, signed, type Deck, type Placement, type Timing, type Transition } from './model'
 import type { Peaks } from './peaks'
-import { drawTimeline, lanes } from './timelineDrawing'
+import { drawTimeline, laneBox, lanes, valueY } from './timelineDrawing'
 
 interface View { left: number; span: number }
 type Preset = 'mix' | 'all'
-type DragMode = 'pan' | 'entry' | 'cue' | 'beat' | 'free'
+type DragMode = 'pan' | 'entry' | 'cue' | 'beat' | 'free' | 'point'
 
 interface Drag {
   id: number
@@ -21,6 +22,7 @@ interface Drag {
   active: boolean
   time: number
   readout: string
+  point?: { lane: LaneId; index: number; points: Point[] }
 }
 
 export interface TimelineHandle {
@@ -38,11 +40,23 @@ interface Props {
   timing: Timing
   placement: Placement
   style: Transition
+  automation: Automation
+  group: LaneGroup
+  setGroup: (group: LaneGroup) => void
+  onAutomation: (lane: LaneId, points: Point[]) => void
   peaksA: Peaks | null
   peaksB: Peaks | null
   onSeek: (time: number) => void
   onPlacement: (patch: Partial<Placement>) => void
 }
+
+const GROUPS: ReadonlyArray<{ id: LaneGroup; label: string }> = [
+  { id: 'x', label: 'Crossfader' }, { id: 0, label: 'Graves' }, { id: 1, label: 'Medios' }, { id: 2, label: 'Agudos' },
+]
+const dbText = (db: number) => db <= KILL ? 'kill' : `${signed(Math.round(db * 2) / 2).replace('.', ',')} dB`
+const valueText = (lane: LaneId, v: number) => lane === 'x'
+  ? (Math.abs(v - 0.5) < 0.005 ? 'centro' : `${Math.round((1 - v) * 100)}% A · ${Math.round(v * 100)}% B`)
+  : `${lane[0]} ${dbText(v)}`
 
 function fitMix({ A, timing, placement }: Props): View {
   const left = placement.mixBar >= 10 ? A.db[placement.mixBar - 10] : 0
@@ -72,6 +86,33 @@ export const Timeline = memo(function Timeline(props: Props) {
   const drag = useRef<Drag | null>(null)
   const pending = useRef<PointerEvent<HTMLDivElement> | null>(null)
   const [preset, setPreset] = useState<Preset | null>('mix')
+  const active = useRef<{ lane: LaneId; index: number } | null>(null)
+
+  /** Qué curva y qué valor hay en la altura `y` de la franja del medio (null si está fuera). */
+  const laneAt = (y: number): { lane: LaneId; v: number } | null => {
+    const h = size.current.h
+    const { aBottom, bTop, middle } = lanes(h)
+    if (y < aBottom || y > bTop) return null
+    const ids = lanesOf(data.current.group)
+    const lane = ids.length === 1 || y < middle ? ids[0] : ids[1]
+    const { top, bottom } = laneBox(h, lane)
+    const r = clamp((y - top) / (bottom - top), 0, 1)
+    return { lane, v: lane === 'x' ? Math.round(r * 100) / 100 : posToDb(1 - 2 * r) }
+  }
+  /** Punto de la curva bajo (x, y), si hay uno a menos de 7 px. */
+  const pointAt = (x: number, y: number): { lane: LaneId; index: number } | null => {
+    const { left, span } = view.current
+    const { automation, timing, A, group } = data.current
+    let best: { lane: LaneId; index: number } | null = null, dist = 7
+    for (const lane of lanesOf(group)) {
+      automation[lane].forEach((p, index) => {
+        const px = (timing.mixT + p.at * A.bar - left) * size.current.w / span
+        const d = Math.hypot(px - x, valueY(size.current.h, lane, p.v) - y)
+        if (d <= dist) { dist = d; best = { lane, index } }
+      })
+    }
+    return best
+  }
 
   const placeHead = useCallback(() => {
     const time = currentTime.current
@@ -94,6 +135,26 @@ export const Timeline = memo(function Timeline(props: Props) {
     const { A, B, rate, onPlacement } = data.current
     const dt = (e.clientX - d.x) * d.span / size.current.w
     const p = d.placement
+    if (d.mode === 'point' && d.point) {
+      const box = surface.current!.getBoundingClientRect()
+      const x = e.clientX - box.left - surface.current!.clientLeft
+      const y = e.clientY - box.top - surface.current!.clientTop
+      const { lane, index, points } = d.point
+      const step = e.altKey ? 0 : e.shiftKey ? 1 : 0.25          // beat; Mayús: compás; Opción: libre
+      const raw = (view.current.left + x * view.current.span / size.current.w - data.current.timing.mixT) / A.bar
+      const lo = points[index - 1]?.at ?? -Infinity, hi = points[index + 1]?.at ?? Infinity
+      const at = clamp(step ? Math.round(raw / step) * step : Math.round(raw * 1000) / 1000, lo, hi)
+      const { top, bottom } = laneBox(size.current.h, lane)
+      const r = clamp((y - top) / (bottom - top), 0, 1)
+      const v = lane === 'x' ? Math.round(r * 100) / 100 : posToDb(1 - 2 * r)
+      const next = points.slice()
+      next[index] = { at, v }
+      d.point.points = next
+      data.current.onAutomation(lane, next)
+      d.readout = `${valueText(lane, v)} · compás ${(p.mixBar + 1 + at).toLocaleString('es-AR', { maximumFractionDigits: 2 })}`
+      if (readout.current) { readout.current.hidden = false; readout.current.textContent = d.readout }
+      return
+    }
     if (d.mode === 'pan') {
       view.current.left = clamp(d.left - dt, 0, data.current.timing.end - view.current.span)
       dirty.current = true
@@ -134,7 +195,7 @@ export const Timeline = memo(function Timeline(props: Props) {
       dirty.current = false
       const { left, span } = view.current
       const { timing, A } = data.current
-      detail.current = drawTimeline(ctx, w, h, left, span, data.current)
+      detail.current = drawTimeline(ctx, w, h, left, span, { ...data.current, active: active.current })
       const { bTop } = lanes(h)
       const entryX = (timing.mixT - left) * w / span
       const cueX = (timing.cueT - left) * w / span
@@ -272,7 +333,7 @@ export const Timeline = memo(function Timeline(props: Props) {
     setView(left, preset === 'all' ? props.timing.end : span)
     dirty.current = true
     requestDraw()
-  }, [props.timing, props.placement, props.style, props.peaksA, props.peaksB, preset, requestDraw, setView])
+  }, [props.timing, props.placement, props.style, props.automation, props.group, props.peaksA, props.peaksB, preset, requestDraw, setView])
 
   const down = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || drag.current) return
@@ -281,8 +342,32 @@ export const Timeline = memo(function Timeline(props: Props) {
     const { left, span } = view.current
     const marker = (e.target as Element).closest<HTMLElement>('[data-marker]')?.dataset.marker
     const { bTop } = lanes(size.current.h)
-    const bLane = e.clientY - box.top - el.clientTop >= bTop
+    const x = e.clientX - box.left - el.clientLeft, y = e.clientY - box.top - el.clientTop
     const onMarker = marker === 'entry' || marker === 'cue'
+    const target = !onMarker ? laneAt(y) : null
+    if (target) {
+      // franja del medio: agarrar un punto de la curva, o crear uno donde se hizo clic
+      const { automation, timing, A, onAutomation } = data.current
+      let hit = pointAt(x, y)
+      if (!hit) {
+        const raw = (left + x * span / size.current.w - timing.mixT) / A.bar
+        const at = e.altKey ? Math.round(raw * 1000) / 1000 : Math.round(raw / (e.shiftKey ? 1 : 0.25)) * (e.shiftKey ? 1 : 0.25)
+        const made = upsert(automation[target.lane], at, target.v, 0)
+        onAutomation(target.lane, made.points)
+        hit = { lane: target.lane, index: made.index }
+        data.current = { ...data.current, automation: { ...automation, [target.lane]: made.points } }
+      }
+      active.current = hit
+      dirty.current = true
+      requestDraw()
+      drag.current = {
+        id: e.pointerId, x: e.clientX, y: e.clientY, left, span, placement: props.placement, mode: 'point', marker: false,
+        active: false, time: 0, readout: '', point: { ...hit, points: data.current.automation[hit.lane] },
+      }
+      el.setPointerCapture(e.pointerId)
+      return
+    }
+    const bLane = y >= bTop
     const mode = onMarker ? marker
       : !bLane ? 'pan' : e.altKey ? 'free' : e.shiftKey ? 'beat' : 'entry'
     drag.current = {
@@ -295,8 +380,13 @@ export const Timeline = memo(function Timeline(props: Props) {
   const move = (e: PointerEvent<HTMLDivElement>) => {
     const d = drag.current
     if (!d) {
-      const overB = e.target === canvas.current && e.nativeEvent.offsetY >= lanes(size.current.h).bTop
+      const onCanvas = e.target === canvas.current
+      const y = e.nativeEvent.offsetY
+      const overB = onCanvas && y >= lanes(size.current.h).bTop
+      const overLane = onCanvas && !!laneAt(y)
       e.currentTarget.classList.toggle('over-b', overB)
+      e.currentTarget.classList.toggle('over-lane', overLane)
+      e.currentTarget.classList.toggle('over-point', overLane && !!pointAt(e.nativeEvent.offsetX, y))
       return
     }
     if (d.id !== e.pointerId) return
@@ -319,7 +409,7 @@ export const Timeline = memo(function Timeline(props: Props) {
         pending.current = e
         updateDrag()
         requestDraw()
-      } else props.onSeek(d.time)
+      } else if (d.mode !== 'point') props.onSeek(d.time)
     }
     drag.current = null
     pending.current = null
@@ -333,6 +423,13 @@ export const Timeline = memo(function Timeline(props: Props) {
       <div className="mx-timeline-bar">
         <h3>Grilla de mezcla</h3>
         <span className="mx-span num" ref={count} />
+        <div className="mx-curve-pick">
+          <span>Curva</span>
+          <Seg role="group">
+            {GROUPS.map(({ id, label }) => <button key={id} className={props.group === id ? 'on' : ''} aria-pressed={props.group === id}
+              onClick={() => props.setGroup(id)}>{label}</button>)}
+          </Seg>
+        </div>
         <div className="mx-zoom">
           <div className="mx-zoom-buttons">
             <button className="btn ghost sm icon" aria-label="Alejar grilla" onClick={() => zoomBy(1.5)}><IconMinus size={14} /></button>
@@ -344,7 +441,7 @@ export const Timeline = memo(function Timeline(props: Props) {
           </Seg>
         </div>
       </div>
-      <div className="mx-timeline" ref={surface} onPointerDown={down} onPointerMove={move}
+      <div className="mx-timeline" ref={surface} onPointerDown={down} onPointerMove={move} onDoubleClick={removePoint}
         onPointerUp={finishClick} onPointerCancel={cancel} onLostPointerCapture={cancel}>
         <canvas ref={canvas} aria-hidden />
         <span className="mx-ruler-name" aria-hidden>Compás</span>
@@ -365,5 +462,13 @@ export const Timeline = memo(function Timeline(props: Props) {
   )
 
   function finishClick(e: PointerEvent<HTMLDivElement>) { finish(e) }
+  function removePoint(e: MouseEvent<HTMLDivElement>) {
+    const box = e.currentTarget.getBoundingClientRect()
+    const hit = pointAt(e.clientX - box.left - e.currentTarget.clientLeft, e.clientY - box.top - e.currentTarget.clientTop)
+    if (!hit) return
+    const points = data.current.automation[hit.lane].filter((_, i) => i !== hit.index)
+    active.current = null
+    data.current.onAutomation(hit.lane, points)
+  }
   function cancel(e: PointerEvent<HTMLDivElement>) { finish(e, true) }
 })

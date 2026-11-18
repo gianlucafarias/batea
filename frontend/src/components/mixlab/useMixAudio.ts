@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { audioUrl } from '../../api'
 import { cleanTitle } from '../../util'
-import { clamp, crossfade, KILL, makeTiming, type Deck, type Placement, type Side, type Timing, type Transition } from './model'
+import { evaluate, type Automation, type Held } from './automation'
+import { clamp, makeTiming, type Deck, type Placement, type Side, type Timing, type Transition } from './model'
 import { buildPeaks, type Peaks } from './peaks'
 
 export type EQ = readonly [number, number, number]
@@ -11,6 +12,9 @@ interface Settings {
   auto: boolean
   style: Transition
   manual: ManualMix
+  automation: Automation
+  held: Held
+  bar: number
 }
 
 interface Config extends Settings {
@@ -35,17 +39,17 @@ interface Engine { ctx: AudioContext; master: GainNode; A: Channel; B: Channel }
 interface Media { duration: number | null; peaks: Peaks | null }
 
 const FLAT: EQ = [0, 0, 0]
-const LOW_KILL: EQ = [KILL, 0, 0]
 const EMPTY_MEDIA: Media = { duration: null, peaks: null }
 export const DEFAULT_MANUAL: ManualMix = { x: 0, A: FLAT, B: FLAT, law: 'bass' }
 
 function mixAt(out: ManualMix, c: Config, t: number) {
   if (c.auto && c.timing) {
-    const { mixT, fadeEnd } = c.timing
-    const swapping = c.style === 'bass' && t >= mixT && t < fadeEnd
-    out.x = crossfade(c.style, t, mixT, fadeEnd)
-    out.A = swapping && t >= (mixT + fadeEnd) / 2 ? LOW_KILL : FLAT
-    out.B = swapping && t < (mixT + fadeEnd) / 2 ? LOW_KILL : FLAT
+    // cada control sigue su curva, salvo los que se agarraron a mano mientras suena
+    const at = (t - c.timing.mixT) / c.bar
+    const a = c.automation, h = c.held
+    out.x = clamp(h.x ?? evaluate(a.x, at), 0, 1)
+    out.A = [h.A0 ?? evaluate(a.A0, at), h.A1 ?? evaluate(a.A1, at), h.A2 ?? evaluate(a.A2, at)]
+    out.B = [h.B0 ?? evaluate(a.B0, at), h.B1 ?? evaluate(a.B1, at), h.B2 ?? evaluate(a.B2, at)]
     out.law = c.style
   } else {
     out.x = c.manual.x
@@ -90,15 +94,15 @@ function applyChannel(channel: Channel, gain: number, eq: EQ, when: number, smoo
 
 export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options) {
   const [media, setMedia] = useState({ A: EMPTY_MEDIA, B: EMPTY_MEDIA })
-  const { placement, length, rate, auto, style, manual, onFrame } = options
+  const { placement, length, rate, auto, style, manual, automation, held, bar, onFrame } = options
   const durA = media.A.duration, durB = media.B.duration
   const timing = useMemo(() => {
     if (!decks) return null
     const { A, B } = decks
     return makeTiming(A, B, placement, rate, length, durA ?? A.dur, durB ?? B.dur)
   }, [decks, placement, rate, length, durA, durB])
-  const config = useRef<Config>({ auto, style, manual, timing, rate, onFrame })
-  config.current = { auto, style, manual, timing, rate, onFrame }
+  const config = useRef<Config>({ auto, style, manual, automation, held, bar, timing, rate, onFrame })
+  config.current = { auto, style, manual, automation, held, bar, timing, rate, onFrame }
   const engine = useRef<Engine | null>(null)
   const buffers = useRef<{ A: AudioBuffer | null; B: AudioBuffer | null }>({ A: null, B: null })
   const transport = useRef<{ A: Voice | null; B: Voice | null; start: number; clock: number; playing: boolean }>({
@@ -275,7 +279,7 @@ export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options
   const mixT = timing?.mixT, cueT = timing?.cueT, bStart = timing?.bStart
   useLayoutEffect(() => {
     apply(virtualT())
-  }, [apply, virtualT, timing, auto, style, manual])
+  }, [apply, virtualT, timing, auto, style, manual, automation, held])
 
   useLayoutEffect(() => {
     const e = engine.current, t = transport.current

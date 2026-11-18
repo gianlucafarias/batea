@@ -6,6 +6,7 @@ import { cleanTitle, fmtBpm, parseKey } from '../util'
 import { KeyBadge, Sleeve } from './bits'
 import { IconMix, IconPause, IconPlay, IconSwap, IconThumbDown, IconThumbUp, IconX } from './icons'
 import { MixPicker } from './MixPicker'
+import { bandLane, groupOf, preset, scale, upsert, type Automation, type Held, type LaneGroup, type LaneId, type Point } from './mixlab/automation'
 import { CenterMixer, DeckEQ, MixHelp, Stepper, type TransitionLength } from './mixlab/Controls'
 import { Timeline, type TimelineHandle } from './mixlab/Timeline'
 import { barAt, beatAt, clamp, defaultEntry, makeDeck, phaseOffset, playbackRate, signed, type Deck, type Placement, type Side, type Transition } from './mixlab/model'
@@ -65,6 +66,10 @@ function MixInner({ a, b }: { a: number; b: number }) {
   const [style, setStyle] = useState<Transition>('bass')
   const [length, setLength] = useState<TransitionLength>(16)
   const [mixer, setMixer] = useState({ auto: true, manual: DEFAULT_MANUAL })
+  const [automation, setAutomation] = useState<Automation>(() => preset('bass', 16))
+  const [custom, setCustom] = useState(false)
+  const [group, setGroup] = useState<LaneGroup>('x')
+  const [held, setHeld] = useState<Held>({})
   const [help, setHelp] = useState(false)
   const [pickB, setPickB] = useState(false)
   const [time, setTime] = useState(0)
@@ -98,9 +103,29 @@ function MixInner({ a, b }: { a: number; b: number }) {
     }
   }, [])
 
-  const { engine, media, timing, error: audioError, playing, virtualT, seek, toggle, snapshot, debug } = useMixAudio(decks, {
-    ...mixer, style, rate, placement, length, onFrame,
+  const { engine, media, timing, error: audioError, playing, virtualT, seek: seekEngine, toggle, snapshot, debug } = useMixAudio(decks, {
+    ...mixer, style, rate, placement, length, onFrame, automation, held, bar: decks?.A.bar ?? 2,
   })
+  // al pausar o saltar, los controles agarrados a mano vuelven a seguir su curva
+  useEffect(() => { if (!playing) setHeld((h) => Object.keys(h).length ? {} : h) }, [playing])
+  const seek = useCallback((t: number) => {
+    setHeld((h) => Object.keys(h).length ? {} : h)
+    seekEngine(t)
+  }, [seekEngine])
+
+  const chooseStyle = (next: Transition) => {
+    setStyle(next)
+    setAutomation(preset(next, length))
+    setCustom(false)
+  }
+  const chooseLength = (next: TransitionLength) => {
+    setAutomation((a) => custom ? scale(a, next / length) : preset(style, next))
+    setLength(next)
+  }
+  const editCurve = useCallback((lane: LaneId, points: Point[]) => {
+    setAutomation((a) => a[lane] === points ? a : { ...a, [lane]: points })
+    setCustom(true)
+  }, [])
 
   useLayoutEffect(() => {
     if (!decks || initialized.current) return
@@ -199,6 +224,23 @@ function MixInner({ a, b }: { a: number; b: number }) {
     return () => window.removeEventListener('keydown', key, true)
   }, [closeMix, decks, help, pickB, seekVisible, stepEntry, stepPhase, toggle, virtualT])
 
+  /** Mover una perilla o el crossfader en automática: sonando, toma el control hasta pausar; en pausa, deja un punto en la curva donde está el cabezal. */
+  const editLane = (lane: LaneId, v: number) => {
+    if (!mixer.auto) {
+      editManual((m) => lane === 'x' ? (m.x === v ? m : { ...m, x: v }) : updateBand(m, lane[0] as Side, Number(lane[1]), v))
+      return
+    }
+    if (playing) { setHeld((h) => h[lane] === v ? h : { ...h, [lane]: v }); return }
+    if (!decks || !timing) return
+    const at = Math.round((virtualT() - timing.mixT) / decks.A.bar * 4) / 4
+    setAutomation((a) => {
+      const { points } = upsert(a[lane], at, v)
+      return points === a[lane] ? a : { ...a, [lane]: points }
+    })
+    setCustom(true)
+    setGroup(groupOf(lane))
+  }
+
   const editManual = (update: (m: ManualMix) => ManualMix) => {
     const current = snapshot()
     setMixer((m) => {
@@ -270,6 +312,7 @@ function MixInner({ a, b }: { a: number; b: number }) {
         </div>
 
         <Timeline ref={timeline} A={A} B={B} timing={timing} placement={placement} rate={rate} style={style}
+          automation={automation} group={group} setGroup={setGroup} onAutomation={editCurve}
           peaksA={media.A.peaks} peaksB={media.B.peaks} onSeek={seek} onPlacement={setPlacementPatch} />
 
         <div className="mx-transport">
@@ -287,8 +330,8 @@ function MixInner({ a, b }: { a: number; b: number }) {
         <div className="mx-mixer">
           <section className="mx-module A" aria-label="Controles de A">
             <div className="mx-module-head"><h3>EQ de A</h3></div>
-            <DeckEQ side="A" eq={live.A} onTouch={() => editManual((m) => m).A}
-              onChange={(_, band, db) => editManual((m) => updateBand(m, 'A', band, db))} />
+            <DeckEQ side="A" eq={live.A} held={[held.A0 !== undefined, held.A1 !== undefined, held.A2 !== undefined]}
+              onTouch={() => live.A} onChange={(_, band, db) => editLane(bandLane('A', band), db)} />
             <div className="mx-steppers">
               <Stepper label="Entra B" value={A.db.length - mixBar} display={String(A.db.length - mixBar)}
                 min={1} max={A.db.length} unit="compases antes del final de A" resetTitle="Restablecer entrada de B"
@@ -297,15 +340,16 @@ function MixInner({ a, b }: { a: number; b: number }) {
             </div>
           </section>
 
-          <CenterMixer value={live.x} auto={mixer.auto} style={style} length={length} setStyle={setStyle} setLength={setLength}
+          <CenterMixer value={live.x} auto={mixer.auto} held={held.x !== undefined} custom={custom} style={style} length={length}
+            setStyle={chooseStyle} setLength={chooseLength}
             setAuto={(auto) => auto ? setMixer((m) => ({ ...m, auto })) : editManual((m) => m)}
-            onTouch={() => editManual((m) => m).x}
-            onChange={(x) => editManual((m) => m.x === x ? m : { ...m, x })} />
+            onTouch={() => live.x}
+            onChange={(x) => editLane('x', x)} />
 
           <section className="mx-module B" aria-label="Controles de B">
             <div className="mx-module-head"><h3>EQ de B</h3></div>
-            <DeckEQ side="B" eq={live.B} onTouch={() => editManual((m) => m).B}
-              onChange={(_, band, db) => editManual((m) => updateBand(m, 'B', band, db))} />
+            <DeckEQ side="B" eq={live.B} held={[held.B0 !== undefined, held.B1 !== undefined, held.B2 !== undefined]}
+              onTouch={() => live.B} onChange={(_, band, db) => editLane(bandLane('B', band), db)} />
             <div className="mx-steppers two">
               <Stepper label="B arranca en" value={startBar + 1} display={String(startBar + 1)}
                 min={1} max={B.db.length} unit="compás" unitFirst resetTitle="Restablecer cue de B"

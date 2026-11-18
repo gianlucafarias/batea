@@ -72,10 +72,10 @@ export function Stepper(props: StepperProps) {
 
 const bandLabels = ['Graves', 'Medios', 'Agudos'] as const
 const bandFrequencies = ['120 Hz', '1 kHz', '4 kHz']
-const dbText = (db: number) => db === KILL ? 'Kill' : `${signed(db)} dB`
+const dbText = (db: number) => db === KILL ? 'Kill' : `${signed(Math.round(db))} dB`
 
-function Knob({ db, band, side, touch, change }: {
-  db: number; band: number; side: Side; touch: () => number; change: (db: number) => void
+function Knob({ db, band, side, held, touch, change }: {
+  db: number; band: number; side: Side; held?: boolean; touch: () => number; change: (db: number) => void
 }) {
   const drag = useRef<{ pointer: number; y: number; db: number } | null>(null)
   const beforeKill = useRef(0)
@@ -104,7 +104,7 @@ function Knob({ db, band, side, touch, change }: {
   return (
     <div className="mx-eq-band">
       <span className="mx-eq-label">{bandLabels[band]}</span>
-      <div className={`mx-knob${db === KILL ? ' is-killed' : ''}`} title={`${label} · ${bandFrequencies[band]}`}
+      <div className={`mx-knob${db === KILL ? ' is-killed' : ''}${held ? ' is-held' : ''}`} title={`${label} · ${bandFrequencies[band]}${held ? ' · a mano hasta que pauses' : ''}`}
         tabIndex={0} role="slider" aria-label={label} aria-valuemin={KILL} aria-valuemax={6}
         aria-orientation="vertical" aria-valuenow={db} aria-valuetext={dbText(db)} style={{ '--angle': `${angle}deg` } as CSSProperties}
         onPointerDown={(e) => {
@@ -124,7 +124,7 @@ function Knob({ db, band, side, touch, change }: {
         <span className="mx-knob-dial" aria-hidden />
       </div>
       <div className="mx-band-value">
-        <span className="num">{signed(db)} dB</span>
+        <span className="num">{signed(Math.round(db))} dB</span>
         <button aria-label={`Kill: ${label}`} title={`Kill: ${label}`} aria-pressed={db === KILL}
           onClick={() => {
             if (db !== KILL) beforeKill.current = db
@@ -135,17 +135,20 @@ function Knob({ db, band, side, touch, change }: {
   )
 }
 
-export function DeckEQ({ side, eq, onTouch, onChange }: { side: Side; eq: EQ; onTouch: () => EQ; onChange: (side: Side, band: number, db: number) => void }) {
+export function DeckEQ({ side, eq, held, onTouch, onChange }: {
+  side: Side; eq: EQ; held?: readonly boolean[]; onTouch: () => EQ; onChange: (side: Side, band: number, db: number) => void
+}) {
   return (
     <div className="mx-eq">
-      {eq.map((db, band) => <Knob key={band} side={side} band={band} db={db} touch={() => onTouch()[band]} change={(v) => onChange(side, band, v)} />)}
+      {eq.map((db, band) => <Knob key={band} side={side} band={band} db={db} held={held?.[band]}
+        touch={() => onTouch()[band]} change={(v) => onChange(side, band, v)} />)}
     </div>
   )
 }
 
-interface FaderProps { value: number; auto: boolean; onTouch: () => number; onChange: (v: number) => void }
+interface FaderProps { value: number; auto: boolean; held?: boolean; onTouch: () => number; onChange: (v: number) => void }
 
-function Crossfader({ value, auto, onTouch, onChange }: FaderProps) {
+function Crossfader({ value, auto, held, onTouch, onChange }: FaderProps) {
   const track = useRef<HTMLDivElement>(null)
   const drag = useRef<{ pointer: number; left: number; width: number; offset: number } | null>(null)
   const getValue = (ratio: number, width: number) => Math.abs(ratio - 0.5) * width <= 6 ? 0.5 : clamp(ratio, 0, 1)
@@ -174,7 +177,7 @@ function Crossfader({ value, auto, onTouch, onChange }: FaderProps) {
   return (
     <div className="mx-crossfader">
       <span className="num mx-a">A</span>
-      <div className={`mx-fader${auto ? ' is-auto' : ''}`} role="slider" tabIndex={0} aria-label="Crossfader"
+      <div className={`mx-fader${auto && !held ? ' is-auto' : ''}${held ? ' is-held' : ''}`} role="slider" tabIndex={0} aria-label="Crossfader"
         aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)}
         aria-valuetext={value === 0.5 ? 'Centro' : `${Math.round((1 - value) * 100)}% A, ${Math.round(value * 100)}% B`}
         onPointerDown={(e) => {
@@ -215,7 +218,8 @@ const transitionOptions: ReadonlyArray<{ id: Transition; label: string }> = [
 export const transitionLengths = [8, 16, 32, 64] as const
 export type TransitionLength = typeof transitionLengths[number]
 
-export function CenterMixer({ style, length, setStyle, setLength, setAuto, ...fader }: FaderProps & {
+export function CenterMixer({ style, length, custom, setStyle, setLength, setAuto, ...fader }: FaderProps & {
+  custom: boolean
   style: Transition
   length: TransitionLength
   setStyle: (style: Transition) => void
@@ -233,10 +237,10 @@ export function CenterMixer({ style, length, setStyle, setLength, setAuto, ...fa
       </div>
       <Crossfader {...fader} />
       <div className="mx-transition">
-        <span>Transición</span>
+        <span>{custom ? 'Curva editada' : 'Transición'}</span>
         <Seg role="group">
-          {transitionOptions.map(({ id, label }) => <button className={id === style ? 'on' : ''}
-            key={id} aria-pressed={id === style} onClick={() => setStyle(id)}>{label}</button>)}
+          {transitionOptions.map(({ id, label }) => <button className={id === style && !custom ? 'on' : ''} title={custom ? 'Volver a esta curva' : undefined}
+            key={id} aria-pressed={id === style && !custom} onClick={() => setStyle(id)}>{label}</button>)}
         </Seg>
       </div>
       <div className="mx-transition">
@@ -261,6 +265,11 @@ const shortcuts = [
   ['Scroll lateral / Mayús + rueda', 'Desplazar la grilla'],
   ['Arrastrar B', 'Mover la entrada por compases'],
   ['Mayús / Opción + arrastrar B', 'Mover la fase por beats o por ms'],
+  ['Clic en la franja del medio', 'Agregar un punto a la curva elegida'],
+  ['Arrastrar un punto', 'Moverlo de a beat (Mayús: de a compás, Opción: libre)'],
+  ['Doble clic en un punto', 'Borrarlo'],
+  ['Perilla o crossfader en pausa', 'Deja un punto en la curva donde está el cabezal'],
+  ['Perilla o crossfader sonando', 'Lo manejás vos hasta que pauses'],
   ['Paso', 'Mayús para pasos grandes. Opción para ajustar la fase de a 1 ms.'],
 ] as const
 
