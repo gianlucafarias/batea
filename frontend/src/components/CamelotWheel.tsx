@@ -50,18 +50,21 @@ export function CamelotWheel({ scope, setScope, onMode }: Props) {
 
   const pts = useMemo(() => {
     if (!data) return []
-    return data.points.filter((p) => p[2] != null).map((p) => {
+    return data.points.filter((p) => p[3] != null).map((p) => {
       const h = hash(p[0]), h2 = hash(p[0] * 7 + 3)
-      const e = p[2] as number
-      const jitterY = Number.isInteger(e) ? (h2 - 0.5) * 0.5 : 0
-      return { p, x: p[1] + (h - 0.5) * 0.5, y: e + jitterY, h, h2 }
+      // sin energía (temas de Traktor/Serato sin analizar): al medio de su anillo, dibujados huecos
+      const noEnergy = p[2] == null
+      const e = noEnergy ? 5.5 : p[2] as number
+      const jitterY = noEnergy ? (h2 - 0.5) * 3 : Number.isInteger(e) ? (h2 - 0.5) * 0.5 : 0
+      return { p, x: p[1] + (h - 0.5) * 0.5, y: e + jitterY, h, h2, noEnergy }
     })
   }, [data])
 
+  const noEnergyCount = useMemo(() => pts.filter((q) => q.noEnergy).length, [pts])
   const maxPlays = useMemo(() => Math.max(1, ...pts.map((q) => q.p[7])), [pts])
   const byId = useMemo(() => new Map(pts.map((q) => [q.p[0], q])), [pts])
 
-  const toScreen = useCallback((q: { x: number; y: number; p: MapPoint; h: number; h2: number }): [number, number] | null => {
+  const toScreen = useCallback((q: { x: number; y: number; p: MapPoint; h: number; h2: number; noEnergy?: boolean }): [number, number] | null => {
     const W = size.w - PAD.l - PAD.r, H = size.h - PAD.t - PAD.b
     const k = parseKey(q.p[3])
     if (!k) return null
@@ -130,8 +133,9 @@ export function CamelotWheel({ scope, setScope, onMode }: Props) {
       if (!s) continue
       const hasTag = hiTag == null || q.p[9].includes(hiTag)
       const r = 1.8 + q.p[4] * 0.55
-      ctx.fillStyle = colorOf(q.p, !hasTag ? 0.08 : dimOthers ? 0.38 : 0.82)
-      ctx.beginPath(); ctx.arc(s[0], s[1], r, 0, Math.PI * 2); ctx.fill()
+      const color = colorOf(q.p, !hasTag ? 0.08 : dimOthers ? 0.38 : 0.82)
+      ctx.beginPath(); ctx.arc(s[0], s[1], r, 0, Math.PI * 2)
+      if (q.noEnergy) { ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.stroke() } else { ctx.fillStyle = color; ctx.fill() }
       if (hiTag != null && hasTag) { ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1; ctx.stroke() }
     }
 
@@ -251,6 +255,7 @@ export function CamelotWheel({ scope, setScope, onMode }: Props) {
         </div>
         <div className="map-legend">
           {colorBy === 'key' && <span>Menores (A) adentro, mayores (B) afuera. Más energía, más cerca del borde.</span>}
+          {noEnergyCount > 0 && <span>{plural(noEnergyCount, 'tema hueco', 'temas huecos')}: sin energía todavía, van en el medio de su anillo. Analizalos para ubicarlos bien.</span>}
           {selectedId != null && <span><span style={{ color: '#9be3a9' }}>━</span> tus relaciones · <span style={{ color: '#eacb86' }}>━</span> historial · <span style={{ color: '#ff5a1f' }}>◌</span> sugeridos</span>}
         </div>
         {hover && (
