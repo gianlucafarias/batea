@@ -1,10 +1,10 @@
 {
-  "version": "0.3.0",
-  "min_version": "0.3.0",
-  "notes": "· Batea ahora lee también Traktor Pro 3/4 y Serato DJ (4/5 y 3.x), siempre sin tocar sus bases\n· La barra lateral tiene una sección por cada programa importado, y cada tema muestra en qué programas está…\n· Exportar te deja elegir a qué programa: rekordbox (XML), Traktor (playlist .nml) o Serato y cualquier otro…\n· Nuevo botón Ajustes, con las pestañas Programas y Agentes de IA",
-  "page": "https://github.com/gianlucafarias/batea/releases/tag/v0.3.0",
+  "version": "0.3.1",
+  "min_version": "0.3.1",
+  "notes": "· Arreglo: después de actualizar, Batea podía seguir mostrando la interfaz de la versión anterior (macOS la…",
+  "page": "https://github.com/gianlucafarias/batea/releases/tag/v0.3.1",
   "downloads": {
-    "arm64": "https://github.com/gianlucafarias/batea/releases/download/v0.3.0/Batea-0.3.0-arm64.dmg",
-    "x86_64": "https://github.com/gianlucafarias/batea/releases/download/v0.3.0/Batea-0.3.0-x86_64.dmg"
+    "arm64": "https://github.com/gianlucafarias/batea/releases/download/v0.3.1/Batea-0.3.1-arm64.dmg",
+    "x86_64": "https://github.com/gianlucafarias/batea/releases/download/v0.3.1/Batea-0.3.1-x86_64.dmg"
   }
 }
