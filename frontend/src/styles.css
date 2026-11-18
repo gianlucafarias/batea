@@ -945,22 +945,23 @@ kbd {
 .su-programs .wl-link { justify-self: start; margin: -5px 0 5px 36px; }
 /* tarjetas de programas (logo grande + qué se importa) */
 .su-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.su-card { position: relative; display: grid; grid-template-rows: 1fr auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--muted); transition: border-color var(--moderate) var(--ease), background-color var(--moderate) var(--ease), color var(--moderate) var(--ease); }
+.su-card { position: relative; display: grid; grid-template-rows: 1fr auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--text-2); transition: border-color var(--moderate) var(--ease), background-color var(--moderate) var(--ease), color var(--moderate) var(--ease); }
 .su-card:hover:not(.missing) { border-color: var(--line-2); color: var(--text-2); }
 .su-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); color: var(--text); }
 .su-card.missing { border-style: dashed; }
 .su-card-main { display: grid; grid-template-rows: auto auto auto 1fr; align-content: start; gap: 12px; width: 100%; padding: 18px 16px 16px; text-align: left; color: inherit; border-radius: inherit; }
-.su-card-main:disabled { cursor: default; }
+.su-card-main:disabled { cursor: default; opacity: 1; }  /* el atenuado de "no encontrado" lo maneja .missing */
 .su-card-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .su-card-mark { position: absolute; top: 12px; right: 12px; margin: 0; }
 .su-card.on .su-card-mark { background: var(--accent); border-color: var(--accent); }
 .su-logo-box { display: flex; align-items: center; height: 64px; padding-right: 22px; }
 .su-logo { display: block; max-width: 100%; background: currentColor; -webkit-mask: var(--logo) left center / contain no-repeat; mask: var(--logo) left center / contain no-repeat; transition: opacity var(--moderate) var(--ease); }
-.su-card.missing .su-logo { opacity: 0.35; }
+.su-card.missing .su-logo { opacity: 0.55; }
 .su-logo-own { display: flex; align-items: center; gap: 10px; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; font-stretch: 112%; }
 .su-logo-text { font-size: 24px; font-weight: 800; }
 .su-card-status { font-size: 12px; line-height: 1.45; color: var(--text-2); min-height: 2.9em; }
-.su-card.missing .su-card-status { color: var(--faint); }
+.su-card.missing .su-card-status { color: var(--muted); }
+.su-card.missing { color: var(--muted); }
 .su-card-status em { display: block; font-style: normal; color: var(--accent-2); }
 .su-brings { margin: 0; padding: 12px 0 0; list-style: none; display: grid; gap: 7px; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.4; }
 .su-brings li { position: relative; padding-left: 14px; }
