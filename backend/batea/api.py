@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, analysis, anlz, config, db, discover, export, features, folders, jobs, keyfill, links, rbsync, recommend, runtime, universe
+from . import agents, analysis, anlz, config, db, discover, export, features, folders, jobs, keyfill, links, rbsync, recommend, runtime, universe, updates
 from .api_helpers import (
     VIRTUAL_CRATES, attach_tags, count_tracks, crate_track_ids, is_online, mark_online, query_tracks, real_path, reset_online_cache, TRACK_COLUMNS,
 )
@@ -27,6 +27,32 @@ with db.conn() as _c:
 @app.on_event("startup")
 def _start_watch() -> None:
     discover.watch()
+
+
+# ---------------------------------------------------------------- actualizaciones
+_OPEN_ROUTES = ("/api/update", "/api/status")
+
+
+@app.middleware("http")
+async def _update_gate(request, call_next):
+    """Una versión por debajo de la mínima publicada no trabaja: solo contesta lo que necesita la pantalla de actualizar."""
+    p = request.url.path
+    if p.startswith("/api/") and not p.startswith(_OPEN_ROUTES) and updates.blocked():
+        return JSONResponse({"detail": "Hay que actualizar Batea para seguir usándola.", "update_required": True}, status_code=426)
+    return await call_next(request)
+
+
+@app.get("/api/update")
+def update_status(force: bool = False) -> dict:
+    return updates.check(force=force)
+
+
+@app.post("/api/update/open")
+def update_open() -> dict:
+    """Abre en el navegador la descarga de la versión nueva (solo direcciones de este repositorio)."""
+    url = updates.open_target()
+    subprocess.run(["open", url], check=False)
+    return {"opened": url}
 
 
 # ---------------------------------------------------------------- estado

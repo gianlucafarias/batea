@@ -84,7 +84,11 @@ rm -rf "$BUILD/dist" "$BUILD/work"
   --collect-all pyrekordbox --collect-all webview --collect-all soundfile --collect-all mutagen \
   --copy-metadata mcp --copy-metadata fastapi --copy-metadata uvicorn --copy-metadata pydantic \
   --hidden-import batea.menubar --hidden-import batea.links --hidden-import batea.mcp_server \
-  "${SIGN_ARGS[@]}" "$ROOT/backend/run_batea.py" 2>&1 | grep -vE "^[0-9]+ (INFO|WARNING)" | tail -25 || true
+  "${SIGN_ARGS[@]}" "$ROOT/backend/run_batea.py" > "$BUILD/pyinstaller.log" 2>&1 || {
+    tail -60 "$BUILD/pyinstaller.log"
+    echo "PyInstaller falló: no genero el instalador"; exit 1
+  }
+tail -25 "$BUILD/pyinstaller.log"
 [[ -d "$APP" ]] || { echo "PyInstaller no generó la app"; exit 1; }
 
 echo "→ [5/7] Ajustes de la app (versión, permisos, links batea://)"
@@ -161,6 +165,20 @@ import fingerprint as f; print(f.digest(f.file_hashes()))
 PY
 )" == "$FPFULL" ]] || { echo "✗ El código cambió durante el empaquetado: no genero el instalador. Volvé a correr el script."; exit 1; }
 
+if [[ -n "${SIGN_ID:-}" && -n "${NOTARY_PROFILE:-}" ]]; then
+  # El ticket del .dmg no sustituye al ticket de la app al copiarla a otra Mac.
+  # Notarizar y grapar la app primero permite validarla también sin conexión.
+  echo "→ Notarizando la app"
+  NOTARY_ZIP="$BUILD/Batea-notary.zip"
+  rm -f "$NOTARY_ZIP"
+  ditto -c -k --sequesterRsrc --keepParent "$APP" "$NOTARY_ZIP"
+  xcrun notarytool submit "$NOTARY_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+  xcrun stapler staple "$APP"
+  xcrun stapler validate "$APP"
+  syspolicy_check distribution "$APP"
+  rm -f "$NOTARY_ZIP"
+fi
+
 STAGE="$BUILD/dmg"; rm -rf "$STAGE"; mkdir -p "$STAGE"
 ditto "$APP" "$STAGE/Batea.app"
 ln -s /Applications "$STAGE/Aplicaciones"
@@ -168,11 +186,21 @@ cat > "$STAGE/LEEME.txt" <<'TXT'
 BATEA — cómo instalarla
 
 1. Arrastrá Batea a la carpeta Aplicaciones (de este mismo disco).
+TXT
+if [[ -n "${SIGN_ID:-}" && -n "${NOTARY_PROFILE:-}" ]]; then
+  cat >> "$STAGE/LEEME.txt" <<'TXT'
+2. Abrila desde Aplicaciones. La app está firmada con Developer ID y notarizada por Apple.
+TXT
+else
+  cat >> "$STAGE/LEEME.txt" <<'TXT'
 2. Abrila desde Aplicaciones. Si macOS dice que no puede verificarla:
    click derecho sobre Batea → Abrir → Abrir.
    (Pasa solo la primera vez; es porque la app no está firmada con una cuenta de desarrollador de Apple.)
    Si aun así no abre: Terminal →  xattr -cr /Applications/Batea.app
-3. Necesita rekordbox instalado en esta Mac. Batea solo lee su base de datos, nunca la modifica.
+TXT
+fi
+cat >> "$STAGE/LEEME.txt" <<'TXT'
+3. Podés usar Batea sin rekordbox. Si lo tenés instalado, Batea puede leer su base de datos; nunca la modifica.
 4. La primera vez macOS pide permiso para leer Escritorio, Documentos, Descargas y discos externos:
    Batea los usa para encontrar tu música. Solo lee.
 
@@ -191,6 +219,7 @@ if [[ -n "${SIGN_ID:-}" && -n "${NOTARY_PROFILE:-}" ]]; then
   codesign --force --timestamp -s "$SIGN_ID" "$DMG"
   xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
   xcrun stapler staple "$DMG"
+  xcrun stapler validate "$DMG"
 fi
 
 KEYDET="librosa"; [[ ${#ESSENTIA_ARGS[@]} -gt 0 ]] && KEYDET="essentia"

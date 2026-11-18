@@ -7,6 +7,7 @@ y se anota acá, en lenguaje de quien usa Batea, qué cambió. Lo más nuevo arr
 
 Cambios después del primer empaquetado (no están en los `.dmg` actuales hasta el próximo `release.sh build`):
 
+- Actualizaciones: al abrir, Batea mira en GitHub si hay una versión nueva (aviso en la barra lateral) y, si la tuya quedó por debajo de la mínima publicada, no abre hasta que actualices. Sin internet nunca te frena por primera vez. Tus datos no se tocan.
 - Sin rekordbox (o con su carpeta vacía) la búsqueda automática de música ahora arranca; antes quedaba esperando para siempre y Batea aparecía vacía.
 - Al analizar un tema sin etiquetas, Batea conserva el artista y el título sacados del nombre del archivo (antes los pisaba con el nombre completo).
 - Pantalla de arranque con el logo en lugar de ver la app vacía un instante; si el motor no contesta, ofrece reintentar.

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { api, audioUrl, type Status } from './api'
+import { api, audioUrl, type Status, type UpdateInfo } from './api'
 import type { Crate, Filters, FolderNode, Job, Tag, Track, UniverseList } from './types'
 
 export type View = 'home' | 'crate' | 'map' | 'inbox' | 'tagger'
@@ -17,6 +17,7 @@ interface State {
   crateId: string | null
   selectedId: number | null
   status: Status | null
+  update: UpdateInfo | null
   tags: Tag[]
   crates: Crate[]
   virtualCrates: Crate[]
@@ -87,6 +88,7 @@ export const useApp = create<State>((set, get) => ({
   crateId: null,
   selectedId: null,
   status: null,
+  update: null,
   tags: [],
   crates: [],
   virtualCrates: [],

@@ -12,6 +12,7 @@ import { EditTrackDialog, TrackMenu } from './components/TrackMenu'
 import { Sidebar } from './components/Sidebar'
 import { TrackPanel } from './components/TrackPanel'
 import { Splash, Welcome } from './components/Welcome'
+import { UpdateScreen } from './components/Update'
 import { api } from './api'
 import { drainLinks } from './links'
 import { useApp, usePlayer } from './store'
@@ -20,7 +21,7 @@ import { spring, usePresence } from './lib/motion'
 // el mapa 3D trae three.js (pesado): se carga recién cuando se abre
 
 export default function App() {
-  const { view, loadMeta, selectedId, trackJob, booted, bootError, welcome } = useApp()
+  const { view, loadMeta, selectedId, trackJob, booted, bootError, welcome, update } = useApp()
   // la ficha entra deslizándose al abrirse y sale (más corto) al cerrarse; cambiar de tema no la vuelve a animar
   const [panelId, panelClosing] = usePresence(view !== 'tagger' ? selectedId : null, spring.slow.exit)
 
@@ -28,8 +29,15 @@ export default function App() {
   // (la librería está vacía y la presentación nunca se vio) se muestra la bienvenida mientras se importa.
   const boot = useCallback(() => {
     useApp.setState({ bootError: false })
-    loadMeta()
-      .then(async () => {
+    // Antes de abrir nada se mira si esta versión todavía sirve (si no hay conexión, se sigue con lo último que se supo)
+    api.update().catch(() => null)
+      .then((u) => {
+        useApp.setState({ update: u })
+        if (u?.must_update) return null
+        return loadMeta()
+      })
+      .then(async (skipped) => {
+        if (skipped === null) return
         const st = useApp.getState().status
         // primera vez: se le pregunta qué traer (nada se importa ni se busca antes de que lo confirme)
         useApp.setState({ booted: true, welcome: st && !st.welcome_done && st.library_tracks === 0 ? 'first' : null })
@@ -105,6 +113,7 @@ export default function App() {
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('click', onClick); window.removeEventListener('mouseup', onMouseUp) }
   }, [])
 
+  if (update?.must_update) return <UpdateScreen info={update} />
   if (!booted) return <Splash error={bootError} onRetry={boot} />
   if (welcome) return <Welcome mode={welcome} />
 

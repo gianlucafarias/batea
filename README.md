@@ -106,8 +106,13 @@ cd backend && uv run python -m batea.main            # ventana nativa (usa front
 
 ```sh
 ./scripts/release.sh status      # ¿los instaladores corresponden al código actual?
-./scripts/release.sh build       # arma Apple Silicon e Intel desde el mismo código → release/Batea-<versión>-<arch>.dmg
+SIGN_ID="Developer ID Application: Gianluca Palmier (J96S7CUHS9)" \
+NOTARY_PROFILE="batea-notary" ./scripts/release.sh build
 ```
+
+El comando genera los dos `.dmg` firmados y notarizados en `release/`. El certificado y el perfil del llavero
+se reutilizan para nuevas versiones. Para subir la versión, publicar en GitHub y anunciarla a las apps instaladas,
+seguir el orden completo de `RELEASING.md`.
 
 (`./scripts/make_dist.sh arm64|x86_64` arma uno solo; usá `release.sh build` para que ninguno quede viejo.)
 
@@ -115,6 +120,6 @@ Genera una `Batea.app` autónoma dentro de un `.dmg` (Python y librerías inclui
 
 - **macOS mínimo:** Apple Silicon 15 (lo exige Essentia); Intel 14.
 - **Tonalidad:** en Apple Silicon usa Essentia (medido: ~67% exacto, ~83% compatible contra rekordbox). La versión Intel no lleva Essentia (se cuelga bajo Rosetta y no se pudo verificar en una Intel real) y usa librosa (~56% / ~73%). `keyfill._detect_key_librosa` se usa también en Apple Silicon si Essentia faltara.
-- **Firma:** sin cuenta de desarrollador de Apple la app lleva firma local; en otra Mac se abre la primera vez con click derecho → Abrir (el `.dmg` trae un LEEME). Para distribuirla sin avisos: `SIGN_ID="Developer ID Application: …" NOTARY_PROFILE="…" ./scripts/make_dist.sh arm64` firma y notariza (sin probar todavía).
+- **Firma:** sin cuenta de desarrollador de Apple la app lleva firma local; en otra Mac se abre la primera vez con click derecho → Abrir (el `.dmg` trae un LEEME). Para distribuirla con Developer ID: `SIGN_ID="Developer ID Application: …" NOTARY_PROFILE="batea-notary" ./scripts/release.sh build` firma y notariza la app y el `.dmg`, adjunta sus tickets y valida la distribución. Ver `RELEASING.md` para configurar las credenciales.
 - **Qué cambia empaquetada:** el ícono de la barra, los links `batea://` y el servidor MCP se lanzan con el mismo ejecutable (`Batea --run-module batea.menubar`, etc.; ver `runtime.py` y `main._run_module_mode`). «Conectar con agentes de IA» registra la ruta de esa app, así que hay que conectarlos desde `/Applications` (no desde el `.dmg`) y reconectarlos si se mueve.
 - **Dependencias Intel:** `backend/requirements-intel.in` (numpy < 2.3, porque numba ya no publica binarios Intel nuevos).

@@ -54,7 +54,7 @@ function Tree({ nodes, all, depth, showHidden, empty }: { nodes: Crate[]; all: C
 }
 
 export function Sidebar() {
-  const { view, crateId, go, crates, virtualCrates, jobs, status, trackJob, toast, setExportOpen, setAgentsOpen, loadMeta, openTagger } = useApp()
+  const { view, crateId, go, crates, virtualCrates, jobs, status, trackJob, toast, setExportOpen, setAgentsOpen, loadMeta, openTagger, update } = useApp()
   const [showHidden, setShowHidden] = useState(false)
   const [showSessions, setShowSessions] = useState(false)
   const [showFolders, setShowFolders] = useState(true)
@@ -191,6 +191,11 @@ export function Sidebar() {
         <button className="btn sm ghost" onClick={() => useApp.getState().setWelcome('replay')} title="Volver a ver la presentación">
           Ver la presentación
         </button>
+        {update?.update_available && (
+          <button className="btn sm ghost" onClick={() => { void api.openUpdate().catch(() => {}) }} title={update.notes || 'Abrir la descarga'}>
+            Hay una versión nueva ({update.latest}) · Descargar
+          </button>
+        )}
         <div className="faint" style={{ fontSize: 10.5, padding: '0 2px' }}>
           rekordbox: {status?.rekordbox_found ? `sincronizado ${fmtSync(status?.last_sync)}` : 'no encontrado'}
         </div>

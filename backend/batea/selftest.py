@@ -126,6 +126,21 @@ def run() -> int:
 
     check("links batea://", links)
 
+    def updates_rules() -> str:
+        """Bloquea solo si se sabe que la versión es menor que la mínima; sin datos, o con versiones raras, abre."""
+        from . import updates
+
+        data = {"version": "9.0.0", "min_version": "0.5.0"}
+        assert updates.evaluate(data, "0.4.9")["must_update"] == updates.enforced(), "0.4.9 debería quedar por debajo de 0.5.0"
+        assert not updates.evaluate(data, "0.5.0")["must_update"] and not updates.evaluate(data, "0.10.0")["must_update"]
+        assert updates.evaluate(data, "0.5.0")["update_available"]
+        assert not updates.evaluate(None, "0.1.0")["must_update"], "sin datos no se bloquea"
+        assert not updates.evaluate(data, "dev")["must_update"] and not updates.evaluate(data, "?")["must_update"]
+        assert updates.open_target().startswith(updates.ALLOWED_PREFIX)
+        return f"bloqueo {'activo' if updates.enforced() else 'apagado (desarrollo)'}"
+
+    check("actualización obligatoria (reglas)", updates_rules)
+
     def ask_first() -> str:
         """Una instalación nueva no busca música ni importa nada sola: espera a que la persona lo permita."""
         import time

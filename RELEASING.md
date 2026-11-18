@@ -4,14 +4,22 @@ Guía para que **los dos instaladores (Apple Silicon e Intel) salgan siempre del
 cuando se agregan funciones. Todo está pensado para que lo pueda hacer una persona sin acordarse de nada: los scripts
 avisan cuando algo quedó desactualizado.
 
-## En 30 segundos
+## Preparar una nueva versión
 
 ```sh
 ./scripts/release.sh status        # ¿los instaladores corresponden al código actual?  (no arma nada)
 ./scripts/release.sh bump patch    # nueva versión (patch = arreglos, minor = funciones nuevas, major = cambios grandes)
 #   → completar la entrada nueva en CHANGELOG.md
-./scripts/release.sh build         # arma Apple Silicon + Intel (≈10 min), archiva los viejos y vuelve a verificar
+# Hacer commit y push del código, VERSION y CHANGELOG.md a main; publicar update.json después del release.
+SIGN_ID="Developer ID Application: Gianluca Palmier (J96S7CUHS9)" \
+NOTARY_PROFILE="batea-notary" ./scripts/release.sh build
+./scripts/release.sh status        # ambos instaladores deben aparecer al día
 ```
+
+El certificado y el perfil del llavero se reutilizan entre versiones. El build genera Apple Silicon e Intel,
+ejecuta las pruebas, firma, notariza y adjunta los tickets. Puede tardar varios minutos por las revisiones de Apple.
+No modificar el código mientras se está empaquetando. Para subir los instaladores y anunciar la actualización,
+seguir «Publicar una versión» más abajo.
 
 **Reglas de oro**
 1. Un instalador nunca se arma a mano: siempre `release.sh build` (arma los dos a la vez).
@@ -21,7 +29,7 @@ avisan cuando algo quedó desactualizado.
 
 ## Cómo sabe el sistema que algo quedó viejo
 
-No hay git, así que cada instalador guarda una **huella** (sha256) de todo lo que entra en la app: el código de Python
+Además del historial de Git, cada instalador guarda una **huella** (sha256) de todo lo que entra en la app: el código de Python
 (`backend/batea`), la interfaz (`frontend/src` …), las dependencias (`pyproject.toml`, `uv.lock`,
 `requirements-intel.in`), los íconos y `make_dist.sh`. Los README y esta guía **no** cuentan.
 
@@ -50,9 +58,13 @@ No hay git, así que cada instalador guarda una **huella** (sha256) de todo lo q
    presentación de bienvenida** si es una función principal.
 3. `./scripts/release.sh status` → va a decir DESACTUALIZADO y qué archivos cambiaron. Es lo esperado.
 4. `./scripts/release.sh bump minor` (o `patch`) y completar `CHANGELOG.md`.
-5. `./scripts/release.sh build` → arma arm64 y Intel, **corre `Batea --selftest` sobre cada app empaquetada** y, si falla
-   algo, no genera el `.dmg`. Al final vuelve a correr `status`: tienen que salir dos ✓.
-6. Entregar los dos `.dmg` de `release/` (los de versiones anteriores se mueven solos a `release/archive/`).
+5. Hacer commit y push del código, `VERSION` y `CHANGELOG.md` a `main`, dejando el anuncio de `update.json` para
+   después del release. Así el tag de GitHub apunta al código de esa versión.
+6. Ejecutar el **comando firmado** del bloque inicial, con `SIGN_ID` y `NOTARY_PROFILE`. Arma arm64 e Intel,
+   **corre `Batea --selftest` sobre cada app empaquetada**, firma y notariza. Si falla algo, se detiene.
+   Al final vuelve a correr `status`: tienen que salir dos ✓.
+7. Probar la instalación y publicar siguiendo la sección siguiente. Los dos `.dmg` quedan en `release/`;
+   los de versiones anteriores se mueven solos a `release/archive/`.
 
 ## Pantalla de arranque y presentación de bienvenida
 
@@ -102,6 +114,49 @@ Empaquetada no hay Python suelto, ni carpeta del proyecto, ni `.venv`. Por eso:
 - **Diferencias Apple Silicon / Intel:** cualquier cosa que dependa de Essentia tiene que tener respaldo (ver
   `keyfill._detect_key_librosa`), porque en Intel no está.
 
+## Actualizaciones obligatorias (GitHub)
+
+Cada app instalada lee `update.json` del repositorio (`raw.githubusercontent.com/gianlucafarias/batea/main/update.json`) al abrir,
+como mucho una vez por hora, y guarda la última lectura.
+
+- `version`: la más nueva publicada. Si es mayor que la instalada, la barra lateral muestra «Hay una versión nueva · Descargar».
+- `min_version`: **por debajo de esta, la app no abre**: ve una pantalla «Hay que actualizar Batea para seguir» con el botón de descarga, y
+  la API contesta 426 a todo salvo `/api/update` y `/api/status`. La librería y los datos no se tocan.
+- **Sin internet no se bloquea nadie por primera vez** (un DJ en un club sin señal sigue tocando). Si ya se había leído una mínima mayor, el
+  bloqueo se mantiene aunque no haya conexión: la última lectura queda guardada.
+- Una app corriendo desde el código fuente (desarrollo) nunca se bloquea. Para probarlo: `BATEA_UPDATE_FORCE=1` y `BATEA_UPDATE_URL=file:///ruta/update.json`
+  (`BATEA_NO_UPDATE_CHECK=1` lo apaga).
+- Los links de descarga solo se aceptan si apuntan a `github.com/gianlucafarias/batea/`.
+
+**Publicar una versión**
+
+```sh
+./scripts/release.sh bump minor     # y completar CHANGELOG.md
+# Hacer commit y push del código, VERSION y CHANGELOG.md a main; todavía no anunciar update.json.
+SIGN_ID="Developer ID Application: Gianluca Palmier (J96S7CUHS9)" \
+NOTARY_PROFILE="batea-notary" ./scripts/release.sh build
+./scripts/release.sh status         # ambos al día; probar también la instalación
+./scripts/release.sh publish        # crea el release v<versión> en GitHub con los dos .dmg y genera update.json (pregunta antes)
+git add update.json MIN_VERSION
+git commit -m "Anunciar nueva versión de Batea"
+git push origin main
+```
+
+Si ya se hizo el bump y el build al seguir el bloque inicial, continuar desde `status`; no subir la versión otra vez.
+`publish` requiere GitHub CLI autenticado con acceso al repositorio y muestra los datos antes de pedir confirmación.
+
+El orden completo es **código y versión en main → build firmado → release con los .dmg → push de `update.json`**.
+Si se publica `update.json` antes de subir los instaladores, las apps mostrarían un link que todavía no existe.
+Los instaladores de `release/` ya incluyen la firma y los tickets; no hace falta volver a firmarlos al publicarlos.
+
+Para que una actualización sea **obligatoria**, ejecutar `./scripts/release.sh require` antes de `publish`.
+Eso establece `MIN_VERSION = VERSION`: las versiones anteriores con este chequeo quedan bloqueadas hasta actualizar.
+Sin `require`, `MIN_VERSION` queda como estaba y nadie es obligado: solo ven el aviso. Para dejar de exigir una versión, bajá `MIN_VERSION` y volvé a subir `update.json`.
+Un cambio en `update.json` llega a las apps en hasta una hora (más unos minutos de caché de GitHub).
+
+**Importante:** una app ya repartida solo se puede obligar a actualizar si **ya trae este chequeo**. La primera versión con este código (0.2.x en adelante) tiene
+que salir antes de repartir la beta; las que no lo traen no se enteran de nada.
+
 ## Datos y actualizaciones
 
 - Los datos de cada persona (etiquetas, relaciones, cajas, base) viven en `~/Library/Application Support/Batea`, **fuera
@@ -112,23 +167,39 @@ Empaquetada no hay Python suelto, ni carpeta del proyecto, ni `.venv`. Por eso:
 - Antes de abrir, Batea hace una **copia automática** de la base (cada 12 h, guarda las últimas 10) en `…/Batea/backups`.
 - **No se vuelve a una versión anterior** encima de una más nueva (aunque casi siempre andaría, no está garantizado).
   Para volver atrás: restaurar una copia de `backups/` junto con la versión vieja.
-- **Cómo actualiza una persona:** cierra Batea (y el ícono de la barra), abre el `.dmg` nuevo, arrastra Batea a Aplicaciones
-  y elige «Reemplazar». Un instalador nuevo se entrega a mano (todavía no hay aviso de actualización dentro de la app).
+- **Cómo actualiza una persona:** abre la descarga desde el aviso de actualización, cierra Batea (y el ícono de la barra),
+  abre el `.dmg` nuevo, arrastra Batea a Aplicaciones y elige «Reemplazar». La app avisa y abre la descarga;
+  la instalación se hace manualmente. Los datos de la biblioteca se conservan.
 - **Agentes de IA:** «Conectar con agentes de IA» guarda la ruta de la app. Si la app se mueve o se reinstala en otro
   lugar, aparece «desactualizado» y hay que volver a conectar.
 
 ## Firma y entrega
 
-Estado actual: firma **local** (ad-hoc). En otra Mac, la primera vez hay que abrirla con click derecho → Abrir (el `.dmg`
-trae un `LEEME.txt` que lo explica). Funciona, pero macOS muestra un aviso de seguridad.
+Sin `SIGN_ID`, el empaquetado usa firma **local** (ad-hoc) y el `LEEME.txt` explica cómo abrirla.
+Para distribuir con identidad de desarrollador verificada, se usan `SIGN_ID` y `NOTARY_PROFILE`.
 
 Para que se abra con doble click y sin avisos hace falta, una sola vez:
 1. Cuenta del programa de desarrolladores de Apple (99 USD al año) y el certificado **Developer ID Application**.
 2. Credenciales de notarización guardadas: `xcrun notarytool store-credentials "batea-notary"`.
 
-Después se arma igual pero con: `SIGN_ID="Developer ID Application: Tu Nombre (TEAMID)" NOTARY_PROFILE="batea-notary" ./scripts/release.sh build`.
-Esa ruta (firmar con hardened runtime, notarizar, grapar) está escrita en `make_dist.sh` pero **no se probó todavía**:
-probarla con un `.dmg` de prueba antes de depender de ella.
+En esta Mac, el certificado instalado es `Developer ID Application: Gianluca Palmier (J96S7CUHS9)` y las
+credenciales están guardadas en el llavero bajo el perfil `batea-notary`. Para generar los dos instaladores:
+
+```sh
+SIGN_ID="Developer ID Application: Gianluca Palmier (J96S7CUHS9)" \
+NOTARY_PROFILE="batea-notary" ./scripts/release.sh build
+```
+
+`make_dist.sh` firma con hardened runtime, ejecuta el selftest, envía la app a Apple, le adjunta su ticket y
+exige que pase `syspolicy_check distribution`. Después crea el `.dmg` con esa app, firma y notariza el `.dmg`,
+adjunta su ticket y lo valida. El ticket del contenedor por sí solo dejaba fallando la comprobación de
+distribución de la app por `Notary Ticket Missing`; por eso se adjuntan ambos. Un error de PyInstaller
+detiene el proceso y deja el diagnóstico completo en `build/<arquitectura>/pyinstaller.log`.
+
+El selftest Intel se ejecuta bajo Rosetta en esta Mac; no reemplaza una prueba en hardware Intel real.
+
+Validado el 17 de noviembre de 2026 con Batea 0.2.0 para Apple Silicon e Intel: selftests correctos,
+apps y `.dmg` aceptados por Apple, tickets adjuntos y comprobación de distribución de ambas apps correcta.
 
 ## Probar cómo se comporta sin rekordbox
 

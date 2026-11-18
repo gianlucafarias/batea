@@ -40,6 +40,18 @@ export function filtersToQuery(f: Filters): string {
   return p.toString()
 }
 
+export interface UpdateInfo {
+  current: string
+  latest: string | null
+  min_version: string | null
+  update_available: boolean
+  must_update: boolean
+  notes: string
+  page: string
+  download: string | null
+  online: boolean | null
+}
+
 export interface Status {
   tracks: number
   library_tracks: number
@@ -57,6 +69,8 @@ export interface Status {
 
 export const api = {
   status: () => get<Status>('/api/status'),
+  update: (force = false) => get<UpdateInfo>(`/api/update${force ? '?force=true' : ''}`),
+  openUpdate: () => post<{ opened: string }>('/api/update/open'),
   jobs: () => get<Job[]>('/api/jobs'),
   welcomeDone: () => post('/api/welcome/done'),
   setup: (b: { rekordbox: boolean; search: 'none' | 'all' | 'folder'; path?: string | null }) => post<{ sync?: Job; discover?: Job }>('/api/setup', b),
