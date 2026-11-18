@@ -985,8 +985,6 @@ kbd {
 }
 
 .su-foot { display: flex; align-items: center; justify-content: space-between; gap: 20px; font-size: 12px; margin-top: 4px; }
-.su-confirm { padding: 20px; gap: 16px; }
-.su-confirm .wl-cta-row { justify-content: flex-end; align-items: center; }
 @media (max-height: 820px) {
   .su-body { gap: 10px; padding-bottom: 12px; }
   .su-group { padding: 10px 12px 8px; }
@@ -998,3 +996,6 @@ kbd {
 }
 .fm-auto { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); cursor: pointer; }
 .fm-auto input { accent-color: var(--accent); }
+.su-confirm-modal { width: 440px; }
+.su-confirm-modal p { margin: 8px 0 0; line-height: 1.5; font-size: 13.5px; }
+.su-confirm-modal .wl-cta-row { display: flex; justify-content: flex-end; gap: 8px; }

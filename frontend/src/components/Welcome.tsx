@@ -4,6 +4,7 @@ import logoRekordbox from '../assets/logos/rekordbox.png'
 import logoSerato from '../assets/logos/serato.png'
 import logoTraktor from '../assets/logos/traktor.png'
 import { CORE_SOURCES, isActiveJob, isQueuedJob, legacyRekordbox, missingSource, pickSourcePath, sourceLabel, syncJobSource } from '../sources'
+import { spring, usePresence } from '../lib/motion'
 import { useApp } from '../store'
 import type { Job } from '../types'
 import { hash, keyColor } from '../util'
@@ -322,6 +323,7 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
   const [search, setSearch] = useState<SetupPlan['search']>('none')
   const [path, setPath] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [confirmShown, confirmClosing] = usePresence(confirming || null, spring.slow.exit)
   const [picking, setPicking] = useState(false)
   const detected = status?.sources ?? [legacyRekordbox(status)]
   const sources = [
@@ -360,21 +362,7 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
   return (
     <div className="welcome setup" role="dialog" aria-label="Configuración inicial de Batea">
       <header className="wl-top"><div className="brand"><BrandMark /><span className="brand-name">batea</span></div></header>
-      {confirming ? (
-        <main className="su-body" onKeyDown={(e) => { if (e.key === 'Escape' && !busy) setConfirming(false) }}>
-          <div className="su-group su-confirm">
-            <div className="su-head">
-              <h1>¿Entrar sin importar nada?</h1>
-              <p>Sin música, Bateas, Mapa y Sugerencias quedan vacías. Podés traerla después con el botón Programas, abajo a la izquierda.</p>
-            </div>
-            <div className="wl-cta-row">
-              <button className="btn ghost" autoFocus disabled={busy} onClick={() => setConfirming(false)}>Volver</button>
-              <button className="btn primary wl-cta" disabled={busy} onClick={() => onStart(plan)}>Entrar igual</button>
-            </div>
-          </div>
-        </main>
-      ) : (
-        <main className="su-body">
+      <main className="su-body">
           <div className="su-head">
             <h1>Bienvenido a Batea</h1>
             <p>Marcá de dónde traer tu música. Hasta que toques Empezar, Batea no lee nada.</p>
@@ -429,7 +417,21 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
               {nothing ? 'Lo haré después' : 'Empezar'}
             </button>
           </div>
-        </main>
+      </main>
+      {confirmShown && (
+        <div className={`modal-bg${confirmClosing ? ' closing' : ''}`} onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) setConfirming(false) }}
+          onKeyDown={(e) => { if (e.key === 'Escape' && !busy) setConfirming(false) }}>
+          <div className="modal su-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="su-confirm-t" aria-describedby="su-confirm-d">
+            <div>
+              <h2 id="su-confirm-t">¿Lo dejás para después?</h2>
+              <p id="su-confirm-d" className="muted">Sin música, Bateas, Mapa y Sugerencias quedan vacías. Podés traerla cuando quieras con el botón Programas, abajo a la izquierda.</p>
+            </div>
+            <div className="wl-cta-row">
+              <button className="btn ghost" autoFocus disabled={busy} onClick={() => setConfirming(false)}>Volver</button>
+              <button className="btn primary" disabled={busy} onClick={() => onStart(plan)}>Sí, después</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
