@@ -704,8 +704,10 @@ kbd {
 .source-badges .chip { height: 16px; padding: 0 3px; font-size: 9px; color: var(--muted); border-radius: 4px; }
 .tcell .source-badges { margin-left: 5px; }
 .track-sources { display: grid; gap: 3px; }
-.track-source { display: grid; grid-template-columns: minmax(54px, 1fr) auto minmax(30px, auto) auto auto; gap: 7px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 11.5px; }
+.track-source { display: grid; grid-template-columns: minmax(54px, 1fr) 76px 72px 34px 46px; gap: 7px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 11.5px; }
 .track-source b { overflow-wrap: anywhere; }
+.track-source .ts-bpm { text-align: right; }
+.track-source > :last-child { text-align: right; }
 .track-source-conflict { margin: 0; color: var(--accent-2); font-size: 11.5px; }
 .track-source-conflict.strong { color: var(--danger); }
 .abadge { flex: none; }

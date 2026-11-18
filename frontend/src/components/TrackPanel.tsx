@@ -47,11 +47,11 @@ function SourceAnalysis({ sources }: { sources: TrackSource[] | 'error' }) {
         {sources.map((source) => (
           <div className="track-source" key={source.source}>
             <b>{source.label || sourceLabel(source.source)}</b>
-            <span className="num muted">{source.bpm ? `${fmtBpm(source.bpm)} BPM` : '—'}</span>
-            <span>{source.key_camelot ? <KeyBadge k={source.key_camelot} /> : source.key_raw || '—'}</span>
-            <span title={source.rating == null ? 'Sin puntaje' : `${source.rating} de 5 estrellas`}>
-              {source.rating == null ? '—' : <Stars value={source.rating} />}
+            <span className="ts-stars" title={source.rating == null ? 'Sin puntaje' : `${source.rating} de 5 estrellas`}>
+              {source.rating == null ? <span className="faint">—</span> : <Stars value={source.rating} />}
             </span>
+            <span className="num muted ts-bpm">{source.bpm ? `${fmtBpm(source.bpm)} BPM` : '—'}</span>
+            <span>{source.key_camelot ? <KeyBadge k={source.key_camelot} /> : source.key_raw || '—'}</span>
             <span className="num muted">{source.cues_count == null ? '—' : `${source.cues_count} ${source.cues_count === 1 ? 'cue' : 'cues'}`}</span>
           </div>
         ))}
