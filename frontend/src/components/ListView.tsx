@@ -15,7 +15,7 @@ import { useFluidHover } from '../lib/fluidHover'
 export type SortKey = 'position' | 'title' | 'artist' | 'bpm' | 'key' | 'energy' | 'rating' | 'date_added' | 'intro_bars' | 'play_count' | 'duration'
 
 const COLS: { key: SortKey | null; label: string }[] = [
-  { key: 'position', label: '#' }, { key: null, label: '' }, { key: 'title', label: 'Tema' }, { key: 'artist', label: 'Artista' },
+  { key: 'position', label: '#' }, { key: null, label: '' }, { key: 'title', label: 'Tema' }, { key: 'artist', label: 'Artista' }, { key: null, label: 'Programa' },
   { key: 'bpm', label: 'BPM' }, { key: 'key', label: 'Tono' }, { key: 'energy', label: 'Energía' }, { key: 'rating', label: 'Puntaje' },
   { key: null, label: 'Etiquetas' }, { key: 'intro_bars', label: 'In/Out' }, { key: 'date_added', label: 'Agregado' }, { key: 'duration', label: 'Largo' },
 ]
@@ -83,9 +83,10 @@ export function ListView({ tracks, sort, onSort, multi, onPick }: { tracks: Trac
               </button>
               <div className="thumb"><Sleeve id={t.id} title={t.title} trackKey={t.key} hasArt={t.has_art} size="s" px={32} /></div>
               <div className="cell t tcell" title={t.unanalyzed ? 'Sin analizar' : undefined}>
-                <span className="ellipsis">{cleanTitle(t.title)}</span><AnalysisBadge t={t} /><SourceBadges sources={t.sources} />
+                <span className="ellipsis">{cleanTitle(t.title)}</span><AnalysisBadge t={t} />
               </div>
               <div className="cell muted"><ArtistLinks artist={t.artist} /></div>
+              <div className="lsources"><SourceBadges sources={t.sources} /></div>
               <div className="cell num">{fmtBpm(t.bpm)}</div>
               <div><KeyBadge k={t.key} est={!!t.key_est} /></div>
               <div><EnergyMeter value={t.energy} auto={!t.energy_user} /></div>

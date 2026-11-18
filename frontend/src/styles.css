@@ -353,7 +353,7 @@ button.chip:hover { border-color: #5a534b; color: var(--text); }
 .list { flex: 1; overflow: auto; }
 .lrow {
   display: grid; align-items: center; height: 40px; padding: 0 28px; gap: 12px; border-bottom: 1px solid #1c1a18; cursor: default;
-  grid-template-columns: 30px 32px minmax(180px, 2.2fr) minmax(120px, 1.3fr) 56px 46px 82px 76px minmax(120px, 1.6fr) 64px 70px 44px;
+  grid-template-columns: 30px 32px minmax(180px, 2.2fr) minmax(120px, 1.3fr) 64px 56px 46px 82px 76px minmax(120px, 1.6fr) 64px 70px 44px;
 }
 .list .fh-hl { border-radius: 0; }
 .lrow.sel { background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
@@ -701,6 +701,10 @@ kbd {
 .lrow .tcell { display: flex; align-items: center; min-width: 0; }
 .lrow .tcell .ellipsis { min-width: 0; }
 .source-badges { display: inline-flex; gap: 3px; align-items: center; flex: none; justify-self: start; }
+.source-icon { display: inline-block; width: 15px; height: 15px; flex: none; background: var(--muted); -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
+.lrow:hover .source-icon, .lrow.sel .source-icon { background: var(--text-2); }
+.lsources { display: flex; align-items: center; }
+.lsources .source-badges { gap: 5px; }
 .source-badges .chip { height: 16px; padding: 0 3px; font-size: 9px; color: var(--muted); border-radius: 4px; }
 .tcell .source-badges { margin-left: 5px; }
 .track-sources { display: grid; gap: 3px; }
