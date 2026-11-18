@@ -260,6 +260,12 @@ interface PlayerState {
 const audio = typeof Audio !== 'undefined' ? new Audio() : (null as unknown as HTMLAudioElement)
 if (audio) audio.preload = 'auto'
 
+/** Con el detalle abierto, al poner play a otro tema el detalle pasa a mostrar ese tema. */
+function followPanel(id: number) {
+  const app = useApp.getState()
+  if (app.selectedId != null && app.selectedId !== id && app.view !== 'tagger') app.select(id)
+}
+
 export const usePlayer = create<PlayerState>((set, get) => {
   if (audio) {
     audio.addEventListener('timeupdate', () => set({ time: audio.currentTime }))
@@ -286,6 +292,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
         return
       }
       set({ track: t, time: 0, duration: t.duration || 0, error: null })
+      followPanel(t.id)
       audio.src = audioUrl(t.id)
       audio.volume = get().volume
       // en techno, arrancar donde entra el groove ayuda a escuchar rápido
@@ -294,6 +301,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
     playFrom: (t, seconds) => {
       if (!t.online) return
       set({ track: t, time: seconds, duration: t.duration || 0, error: null })
+      followPanel(t.id)
       audio.src = audioUrl(t.id)
       audio.volume = get().volume
       const start = () => {
