@@ -10,7 +10,7 @@ import { energyColor, KeyBadge } from './bits'
 import { folderCrate } from './FolderTree'
 import { Engine, type Halo, type Highlight } from './map3d/engine'
 import type { LayoutIn } from './map3d/layout.worker'
-import { MapModes, type MapMode } from './MapModes'
+import { DotSize, MapModes, useDotScale, type MapMode } from './MapModes'
 
 type ColorBy = 'key' | 'plays' | 'energy'
 type Edge = [number, number, string, number]
@@ -99,6 +99,7 @@ export function MapView({ scope, setScope, onMode }: Props) {
   const stage = useRef<HTMLDivElement>(null)
   const labelsEl = useRef<HTMLDivElement>(null)
   const eng = useRef<Engine | null>(null)
+  const dot = useDotScale()
   const graphPos = useRef<Float32Array | null>(null)
   const alphaRef = useRef<Float32Array | null>(null)
   const labelPool = useRef<Label[]>([])
@@ -134,11 +135,14 @@ export function MapView({ scope, setScope, onMode }: Props) {
     if (!el) return
     const e = new Engine(el)
     eng.current = e
+    e.setDotScale(dot)
     const ro = new ResizeObserver(() => e.resize(el.clientWidth, el.clientHeight))
     ro.observe(el)
     e.resize(el.clientWidth, el.clientHeight)
     return () => { ro.disconnect(); e.dispose(); eng.current = null }
   }, [])
+
+  useEffect(() => { eng.current?.setDotScale(dot) }, [dot])
 
   // estrellas + conexiones cuando cambian los datos; la constelación se calcula aparte (o sale de la memoria)
   useEffect(() => {
@@ -393,6 +397,7 @@ export function MapView({ scope, setScope, onMode }: Props) {
           onPointerLeave={() => setHover(null)} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()} />
         <div ref={labelsEl} className="map3-labels" />
 
+        <div className="map-dots" title="Tamaño de los puntos"><DotSize /></div>
         <div className="map-ui">
           <MapModes mode="graph" onMode={onMode} />
           <Seg>

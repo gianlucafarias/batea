@@ -1020,3 +1020,6 @@ kbd {
 .switch[aria-checked="true"] i { transform: translateX(14px); background: #fff; }
 .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .switch:disabled { opacity: 1; }  /* sin parpadeo mientras se guarda */
+/* −/+ del tamaño de los puntos: abajo a la derecha del mapa */
+.map-dots { position: absolute; right: 16px; bottom: 14px; z-index: 3; }
+.map-dots button { min-width: 30px; font-size: 15px; }

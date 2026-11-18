@@ -6,7 +6,7 @@ import { folderCrate } from './FolderTree'
 import { useApp } from '../store'
 import { cleanTitle, fmtBpm, hash, keyColor, parseKey, plural } from '../util'
 import { energyColor, KeyBadge } from './bits'
-import { MapModes, type MapMode } from './MapModes'
+import { DotSize, useDotScale, MapModes, type MapMode } from './MapModes'
 
 interface Props { scope: string; setScope: (s: string) => void; onMode: (m: MapMode) => void }
 type ColorBy = 'key' | 'plays' | 'energy'
@@ -18,6 +18,7 @@ export function CamelotWheel({ scope, setScope, onMode }: Props) {
   const { crates, virtualCrates, folders, selectedId, select, tags, toast, loadMeta, go, libraryVersion } = useApp()
   const [data, setData] = useState<{ points: MapPoint[]; edges: [number, number, string, number][] } | null>(null)
   const [colorBy, setColorBy] = useState<ColorBy>('key')
+  const dot = useDotScale()
   const [showEdges, setShowEdges] = useState(false)
   const [hiTag, setHiTag] = useState<number | null>(null)
   const [recIds, setRecIds] = useState<number[]>([])
@@ -132,7 +133,7 @@ export function CamelotWheel({ scope, setScope, onMode }: Props) {
       const s = toScreen(q)
       if (!s) continue
       const hasTag = hiTag == null || q.p[9].includes(hiTag)
-      const r = 1.8 + q.p[4] * 0.55
+      const r = (1.8 + q.p[4] * 0.55) * dot
       const color = colorOf(q.p, !hasTag ? 0.08 : dimOthers ? 0.38 : 0.82)
       ctx.beginPath(); ctx.arc(s[0], s[1], r, 0, Math.PI * 2)
       if (q.noEnergy) { ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.stroke() } else { ctx.fillStyle = color; ctx.fill() }
@@ -150,7 +151,7 @@ export function CamelotWheel({ scope, setScope, onMode }: Props) {
           ctx.strokeStyle = kind === 'history' ? 'rgba(234,203,134,0.7)' : kind === 'avoid' ? 'rgba(239,91,76,0.8)' : 'rgba(155,227,169,0.95)'
           ctx.lineWidth = kind === 'history' ? Math.min(3, 0.8 + count * 0.4) : 2
           ctx.beginPath(); ctx.moveTo(ss[0], ss[1]); ctx.lineTo(so[0], so[1]); ctx.stroke()
-          ctx.fillStyle = colorOf(o!.p); ctx.beginPath(); ctx.arc(so[0], so[1], 4, 0, Math.PI * 2); ctx.fill()
+          ctx.fillStyle = colorOf(o!.p); ctx.beginPath(); ctx.arc(so[0], so[1], 4 * dot, 0, Math.PI * 2); ctx.fill()
         }
         ctx.setLineDash([3, 4]); ctx.lineWidth = 1.2
         for (const id of recIds) {
@@ -158,10 +159,10 @@ export function CamelotWheel({ scope, setScope, onMode }: Props) {
           if (!so) continue
           ctx.strokeStyle = 'rgba(255,90,31,0.55)'
           ctx.beginPath(); ctx.moveTo(ss[0], ss[1]); ctx.lineTo(so[0], so[1]); ctx.stroke()
-          ctx.beginPath(); ctx.arc(so[0], so[1], 7, 0, Math.PI * 2); ctx.stroke()
+          ctx.beginPath(); ctx.arc(so[0], so[1], 7 * dot, 0, Math.PI * 2); ctx.stroke()
         }
         ctx.setLineDash([])
-        ctx.fillStyle = colorOf(sel.p); ctx.beginPath(); ctx.arc(ss[0], ss[1], 7, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = colorOf(sel.p); ctx.beginPath(); ctx.arc(ss[0], ss[1], 7 * dot, 0, Math.PI * 2); ctx.fill()
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke()
       }
     }
@@ -173,7 +174,7 @@ export function CamelotWheel({ scope, setScope, onMode }: Props) {
       ctx.fillRect(x, y, Math.abs(box.x1 - box.x0), Math.abs(box.y1 - box.y0))
       ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(box.x1 - box.x0), Math.abs(box.y1 - box.y0))
     }
-  }, [pts, size, colorOf, showEdges, data, byId, toScreen, selectedId, recIds, hiTag, box])
+  }, [pts, size, colorOf, showEdges, data, byId, toScreen, selectedId, recIds, hiTag, box, dot])
 
   // ---------------------------------------------------------------- interacción
   const nearest = (mx: number, my: number) => {
@@ -240,6 +241,7 @@ export function CamelotWheel({ scope, setScope, onMode }: Props) {
           }}
           onMouseLeave={() => { setHover(null); drag.current = null; setBox(null) }}
         />
+        <div className="map-dots" title="Tamaño de los puntos"><DotSize /></div>
         <div className="map-ui" style={{ top: 14 }}>
           <MapModes mode="wheel" onMode={onMode} />
           <Seg>

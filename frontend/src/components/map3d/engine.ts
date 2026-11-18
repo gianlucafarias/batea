@@ -8,6 +8,7 @@ attribute float aalpha;
 attribute vec3 acolor;
 uniform float uScale;
 uniform float uSize;
+uniform float uDot;
 varying vec3 vColor;
 varying float vAlpha;
 void main() {
@@ -15,7 +16,7 @@ void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   float far = clamp((-mv.z - 250.0) / 2200.0, 0.0, 0.7);
   vAlpha = aalpha * (1.0 - far);
-  gl_PointSize = clamp(asize * uSize * uScale / -mv.z, 2.5, 80.0);
+  gl_PointSize = clamp(asize * uSize * uScale * uDot / -mv.z, 2.5 * uDot, 80.0 * uDot);
   gl_Position = projectionMatrix * mv;
 }`
 const POINT_FS = /* glsl */ `
@@ -95,7 +96,7 @@ export class Engine {
     this.controls.addEventListener('change', () => { this.dirty = true; this.proj = null })
 
     this.pMat = new THREE.ShaderMaterial({
-      uniforms: { uScale: { value: 800 }, uSize: { value: 4 } }, vertexShader: POINT_VS, fragmentShader: POINT_FS,
+      uniforms: { uScale: { value: 800 }, uSize: { value: 4 }, uDot: { value: 1 } }, vertexShader: POINT_VS, fragmentShader: POINT_FS,
       transparent: true, depthWrite: false,
     })
     this.points = new THREE.Points(this.pGeo, this.pMat)
@@ -207,6 +208,9 @@ export class Engine {
   }
 
   // ------------------------------------------------------------ pantalla
+  /** Multiplicador del tamaño de los puntos (control − / +). */
+  setDotScale(k: number) { this.pMat.uniforms.uDot.value = k; this.touch() }
+
   resize(w: number, h: number) {
     this.w = Math.max(1, w); this.h = Math.max(1, h)
     this.renderer.setSize(this.w, this.h)
