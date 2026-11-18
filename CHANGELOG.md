@@ -3,9 +3,33 @@
 Cada vez que se arma un instalador nuevo se sube la versión (`./scripts/release.sh bump patch|minor|major`)
 y se anota acá, en lenguaje de quien usa Batea, qué cambió. Lo más nuevo arriba.
 
-## 0.2.0 — 2026-11-17 (pendiente de reempaquetar)
+## 0.3.0 — 2026-11-18
 
-Cambios después del primer empaquetado (no están en los `.dmg` actuales hasta el próximo `release.sh build`):
+**Traktor y Serato, además de rekordbox**
+- Batea ahora lee también Traktor Pro 3/4 y Serato DJ (4/5 y 3.x), siempre sin tocar sus bases. La bienvenida pregunta qué programas usás (los que encuentra aparecen marcados) y si querés sumar tu música suelta.
+- La barra lateral tiene una sección por cada programa importado, y cada tema muestra en qué programas está (columna «Programa» en la lista y «En cada programa» en la ficha).
+- Exportar te deja elegir a qué programa: rekordbox (XML), Traktor (playlist .nml) o Serato y cualquier otro (.m3u8).
+- Nuevo botón **Ajustes**, con las pestañas Programas y Agentes de IA.
+
+**Saber qué suena**
+- El ícono de la barra de menú muestra el tema que está sonando en rekordbox, Serato o Traktor y qué poner después (en Traktor, por Broadcasting; Ajustes te dice cómo configurarlo). Se activa o se apaga en Ajustes → Programas, donde también podés elegir el programa o dejar que lo detecte solo.
+
+**Probar mezcla, renovada**
+- Más fácil de encontrar: botón «Probar mezcla con…» en el detalle de cualquier tema, «Mezclar con…» en el reproductor, en el clic derecho y con la tecla **M**. Un selector te propone los sugeridos y te deja buscar en toda la librería; adentro de la mezcla, «Cambiar B» prueba otro tema sin salir.
+- Zoom en la grilla hasta ver 2 compases, con la onda dibujada desde el audio y las líneas de cada beat de los dos temas, para clavar la fase.
+- Arrastrás B para mover la entrada (de a compás; Mayús de a beat; Opción libre) y la banderita del cue para elegir desde qué compás arranca.
+- Mezclador nuevo: EQ de 3 bandas por tema con perillas y Kill, y crossfader de verdad.
+- Transiciones Cambio de graves, Fundido o Corte, de 8 a 64 compases. En automático, el crossfader y los graves se mueven solos.
+- Las curvas de la transición se editan: clic agrega un punto, arrastrar lo mueve, doble clic lo borra. Si agarrás una perilla mientras suena, la manejás vos hasta que pauses.
+
+**Además**
+- Mapa: botones − / + para el tamaño de los puntos; la rueda Camelot muestra también los temas sin energía.
+- La búsqueda automática de tu música se prende o apaga desde Ajustes.
+- Con el detalle abierto, al poner play a otro tema el detalle pasa a ese tema.
+
+## 0.2.0 — 2026-11-17
+
+Cambios después del primer empaquetado:
 
 - Actualizaciones: al abrir, Batea mira en GitHub si hay una versión nueva (aviso en la barra lateral) y, si la tuya quedó por debajo de la mínima publicada, no abre hasta que actualices. Sin internet nunca te frena por primera vez. Tus datos no se tocan.
 - Sin rekordbox (o con su carpeta vacía) la búsqueda automática de música ahora arranca; antes quedaba esperando para siempre y Batea aparecía vacía.
