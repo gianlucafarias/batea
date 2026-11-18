@@ -3,6 +3,10 @@
 Cada vez que se arma un instalador nuevo se sube la versión (`./scripts/release.sh bump patch|minor|major`)
 y se anota acá, en lenguaje de quien usa Batea, qué cambió. Lo más nuevo arriba.
 
+## 0.3.1 — 2026-11-18
+
+- Arreglo: después de actualizar, Batea podía seguir mostrando la interfaz de la versión anterior (macOS la guardaba en caché). Ahora siempre carga la de la versión instalada.
+
 ## 0.3.0 — 2026-11-18
 
 **Traktor y Serato, además de rekordbox**
