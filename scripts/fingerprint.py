@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Huella del código de Batea y control de que los instaladores no queden viejos.
 
-Como el proyecto no es un repositorio git, la "versión exacta" de un instalador se identifica con una huella
+Además del historial de git, la "versión exacta" de un instalador se identifica con una huella
 (sha256) de todo lo que termina dentro de la app: código de Python, interfaz, dependencias, íconos y el script
 de empaquetado. Cada instalador guarda la huella con la que se armó; si el código cambia después, la huella
 actual deja de coincidir y `release.sh status` avisa cuáles instaladores quedaron viejos y por qué archivos.

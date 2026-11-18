@@ -32,8 +32,8 @@ def _bpm_delta(a: float | None, b: float | None) -> float | None:
 def style_profile(c: sqlite3.Connection, around_bpm: float | None = None, within: set[int] | None = None) -> dict:
     """Estilo de mezcla aprendido de tus pares (historial + relaciones + 👍).
 
-    Con `around_bpm` solo mira pares en ese rango (±12%): tus sets de techno
-    no se mezclan igual que los de cumbia.
+    Con `around_bpm` solo mira pares en ese rango (±12%): un set a 125 BPM
+    no se mezcla igual que uno a 95.
     """
     sql = """SELECT r.a, r.b, ta.bpm AS ba, tb.bpm AS bb, ta.key AS ka, tb.key AS kb
              FROM relations r JOIN tracks ta ON ta.id=r.a JOIN tracks tb ON tb.id=r.b

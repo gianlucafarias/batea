@@ -21,9 +21,10 @@ from pydantic import Field
 from . import ai_tools, links
 
 INSTRUCTIONS = """\
-Batea es el organizador de música de un DJ de techno (también tiene cumbia, reggaeton y otros géneros \
-de gigs). Estas herramientas leen su librería real: temas con BPM, tono Camelot, energía 1-10, intro/outro \
-en compases, etiquetas, playlists de rekordbox, cajas propias y el historial de sesiones que tocó.
+Batea es el organizador de música de un DJ. Estas herramientas leen su librería real: temas con BPM, \
+tono Camelot, energía 1-10, intro/outro en compases, etiquetas, playlists de rekordbox, Traktor o Serato, \
+cajas propias y el historial de sesiones que tocó. La librería puede mezclar varios géneros (por ejemplo, \
+los de distintos tipos de fecha): no supongas un estilo, deducilo de los datos.
 
 Cómo responder:
 - En español rioplatense, directo y concreto.

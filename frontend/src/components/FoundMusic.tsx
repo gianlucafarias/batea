@@ -6,14 +6,14 @@ import { IconFolder, IconSync } from './icons'
 
 const HOME = /^\/Users\/[^/]+/
 
-/** "/Volumes/PortableSSD/COSO/TECHNO" → ["PortableSSD", "COSO", "TECHNO"]; "/Users/x/Downloads" → ["Tu Mac", "Downloads"] */
+/** "/Volumes/MUSICA/Techno/2024" → ["MUSICA", "Techno", "2024"]; "/Users/x/Downloads" → ["Tu Mac", "Downloads"] */
 function parts(folder: string): string[] {
   if (folder.startsWith('/Volumes/')) return folder.slice(9).split('/')
   if (HOME.test(folder)) return ['Tu Mac', ...folder.replace(HOME, '').split('/').filter(Boolean)]
   return folder.split('/').filter(Boolean)
 }
 
-/** Carpeta principal: la primera carpeta dentro de tu usuario o del disco (Downloads, Music, COSO MUSICA NO TOCAR…). */
+/** Carpeta principal: la primera carpeta dentro de tu usuario o del disco (Downloads, Music, Mis temas…). */
 function topOf(folder: string): string {
   const m = folder.match(/^(\/Volumes\/[^/]+|\/Users\/[^/]+)(\/[^/]+)?/)
   return m ? m[0] : folder

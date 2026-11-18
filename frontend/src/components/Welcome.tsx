@@ -240,8 +240,8 @@ function ArtFolders() {
   const rows: [string, string, number, boolean][] = [
     ['Tu Mac', 'Música › Nuevos', 42, false],
     ['Tu Mac', 'Descargas › Promos', 18, false],
-    ['PortableSSD', 'SETS › 2026', 318, false],
-    ['PortableSSD', 'Samples', 0, true],
+    ['MUSICA', 'SETS › 2026', 318, false],
+    ['MUSICA', 'Samples', 0, true],
   ]
   return (
     <div className="wl-fold">
@@ -461,8 +461,8 @@ function demoLoad(kind: string): Load {
   const synced = DEMO_PLAN.sources.map((source) => job(`sync:${source}`, '', 1, 'done'))
   switch (kind) {
     case 'sync': return { ...INITIAL, jobs: [synced[0], job('sync:traktor', 'Leyendo playlists…', 0.2)], tracks: 8420 }
-    case 'discover': return { ...INITIAL, jobs: [...synced, job('discover', 'Recorriendo el disco…', 0.55)], tracks: 18230, local: 126 }
-    case 'done': return { ...INITIAL, jobs: [...synced, job('discover', '', 1, 'done')], tracks: 18356, local: 126, done: true }
+    case 'discover': return { ...INITIAL, jobs: [...synced, job('discover', 'Recorriendo el disco…', 0.55)], tracks: 9240, local: 126 }
+    case 'done': return { ...INITIAL, jobs: [...synced, job('discover', '', 1, 'done')], tracks: 9366, local: 126, done: true }
     case 'empty': return { ...INITIAL, done: true }
     default: return INITIAL
   }
