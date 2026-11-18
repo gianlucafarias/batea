@@ -25,7 +25,7 @@ const REL_KINDS: { kind: Relation['kind']; label: string; hint: string }[] = [
 function toTrack(d: TrackDetail): Track { return d }
 
 function SourceAnalysis({ sources }: { sources: TrackSource[] | 'error' }) {
-  if (sources === 'error') return <div className="section"><span className="eyebrow">Analizado en</span><span className="muted">No pude cargar los datos de los programas.</span></div>
+  if (sources === 'error') return <div className="section"><span className="eyebrow">En cada programa</span><span className="muted">No pude cargar los datos de los programas.</span></div>
   if (!sources.length) return null
 
   const tonalities = sources.flatMap((source) => {
@@ -42,7 +42,7 @@ function SourceAnalysis({ sources }: { sources: TrackSource[] | 'error' }) {
 
   return (
     <div className="section">
-      <span className="eyebrow">Analizado en</span>
+      <span className="eyebrow">En cada programa</span>
       <div className="track-sources">
         {sources.map((source) => (
           <div className="track-source" key={source.source}>
@@ -58,7 +58,7 @@ function SourceAnalysis({ sources }: { sources: TrackSource[] | 'error' }) {
       </div>
       {conflictingTones.length > 0 && (
         <p className={`track-source-conflict${distant ? ' strong' : ''}`}>
-          {conflictingTones.map(({ label, tone }) => `${label} dice ${tone}`).join(', ')}
+          Tono distinto: {conflictingTones.map(({ label, tone }) => `${label} dice ${tone}`).join(', ')}
         </p>
       )}
     </div>

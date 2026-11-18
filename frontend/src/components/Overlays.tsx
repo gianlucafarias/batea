@@ -13,9 +13,9 @@ import { spring, usePresence } from '../lib/motion'
 const LAST_TARGET = 'batea.export.target'
 const FALLBACK_TARGET: ExportTarget = {
   id: 'rekordbox', label: 'rekordbox', available: true, reason: null, format: 'XML',
-  carries: ['Playlists en orden', 'Rating, comentario y color', 'BPM y tono'],
-  loses: ['Cues y grillas de Batea'],
-  how_to_load: 'Preferencias → Avanzado → Base de datos → rekordbox xml → elegí el archivo; aparece en la barra lateral',
+  carries: ['Las cajas, en orden', 'Rating, comentario y color', 'BPM y tono'],
+  loses: ['Cues y grillas'],
+  how_to_load: 'En rekordbox: Preferencias → Avanzado → Base de datos → rekordbox xml, y elegí el archivo. Las cajas aparecen en la barra lateral.',
 }
 
 function lastTarget(): string | null {
@@ -82,7 +82,7 @@ export function ExportDialog() {
         <div>
           <h2>Exportar</h2>
           <p className="muted" style={{ margin: '6px 0 0', lineHeight: 1.5 }}>
-            Batea escribe un archivo aparte con las cajas elegidas. No toca la base de ningún programa.
+            Batea arma un archivo con las cajas que elegiste. Después lo cargás vos en el programa.
           </p>
         </div>
         {targets.length > 1 && (
@@ -100,9 +100,9 @@ export function ExportDialog() {
           </div>
         )}
         <div className="export-detail">
-          <div><div className="eyebrow">Qué viaja</div><ul>{cur.carries.map((x) => <li key={x}>{x}</li>)}</ul></div>
-          <div><div className="eyebrow">Qué no viaja</div><ul>{cur.loses.map((x) => <li key={x}>{x}</li>)}</ul></div>
-          <div><div className="eyebrow">Cómo cargarlo</div><div style={{ color: 'var(--text-2)', marginTop: 4 }}>{cur.how_to_load}</div></div>
+          <div><div className="eyebrow">Se lleva</div><ul>{cur.carries.map((x) => <li key={x}>{x}</li>)}</ul></div>
+          <div><div className="eyebrow">No se lleva</div><ul>{cur.loses.map((x) => <li key={x}>{x}</li>)}</ul></div>
+          <div><div className="eyebrow">Después, en el programa</div><div style={{ color: 'var(--text-2)', marginTop: 4 }}>{cur.how_to_load}</div></div>
         </div>
         <HoverList className="check-list">
           {groups.map((g) => g.list.length > 0 && (

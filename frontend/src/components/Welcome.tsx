@@ -278,13 +278,13 @@ function ArtAI() {
 interface Slide { id: string; eyebrow: string; title: string; body: string; art: ReactNode }
 
 const SLIDES: Slide[] = [
-  { id: 'bateas', eyebrow: 'Bateas', title: 'Tu librería, como una batea de discos.', body: 'Hojeás las cajas con sus carátulas, filtrás por tono, BPM y energía, y armás tus propias cajas. Leé tus librerías de rekordbox, Traktor o Serato sin modificarlas.', art: <ArtCrates /> },
+  { id: 'bateas', eyebrow: 'Bateas', title: 'Tu librería, como una batea de discos.', body: 'Hojeás las cajas con sus carátulas, filtrás por tono, BPM y energía, y armás tus propias cajas. Lee tu librería de rekordbox, Traktor o Serato sin cambiarle nada.', art: <ArtCrates /> },
   { id: 'tagger', eyebrow: 'Etiquetado rápido', title: 'Un tema en segundos, sin tocar el mouse.', body: 'Escuchás y etiquetás con el teclado: energía, puntaje, intro, outro, mashup, acapella. También en tanda, con varios temas juntos.', art: <ArtKeys /> },
   { id: 'map', eyebrow: 'Mapa', title: 'Tu música como una constelación.', body: 'Cada tema es una estrella. Los que mezclás juntos forman racimos; tocás una y se encienden sus conexiones y sugeridos. Además, la rueda Camelot de siempre.', art: <ArtMap /> },
   { id: 'mix', eyebrow: 'Probar la mezcla', title: 'Probá la mezcla antes de la noche.', body: 'Dos temas alineados por la grilla de compases: elegís en qué compás entra el segundo y escuchás el cruce. El veredicto queda anotado como relación.', art: <ArtMix /> },
   { id: 'suggest', eyebrow: 'Qué poner después', title: 'Sugerencias que aprenden de cómo mezclás.', body: 'Combinan tono, BPM y energía con tu historial de rekordbox, Traktor o Serato. Cada sugerencia te dice por qué aparece. También desde el ícono de la barra de menú, mientras tocás.', art: <ArtSuggest /> },
   { id: 'universes', eyebrow: 'Universos', title: 'Un universo para cada tipo de noche.', body: 'Limitá todo Batea a las playlists y carpetas que elijas: techno, cumbia, casamientos. No borra nada; con «Toda la librería» volvés a ver todo.', art: <ArtUniverses /> },
-  { id: 'found', eyebrow: 'Música nueva', title: 'Encontrá música fuera de rekordbox, Traktor o Serato.', body: 'Busca sola en tu Mac y en cada disco que conectes. El análisis (BPM, tono, energía, intro y outro) se hace solo cuando lo pedís, de a un tema por vez, para no trabar la computadora.', art: <ArtFolders /> },
+  { id: 'found', eyebrow: 'Música nueva', title: 'También encuentra la música que no está en ningún programa.', body: 'Busca sola en tu Mac y en cada disco que conectes. El análisis (BPM, tono, energía, intro y outro) se hace solo cuando lo pedís, de a un tema por vez, para no trabar la computadora.', art: <ArtFolders /> },
   { id: 'ai', eyebrow: 'Con tu IA', title: 'Hablá con tu librería.', body: 'Conectá Claude, Codex o Cursor y preguntales por tus sesiones, armá sets o pedí ideas. Cada tema que nombran es un link que abre Batea.', art: <ArtAI /> },
 ]
 
@@ -302,17 +302,17 @@ function Option({ on, onSelect, title, children, disabled, kind = 'radio' }: { o
 
 // ------------------------------------------------------------------ tarjetas de la primera pantalla
 const SOURCE_CARDS: Record<string, { logo: string; ratio: string; h: number; brings: string[] }> = {
-  rekordbox: { logo: logoRekordbox, ratio: '1916 / 325', h: 34, brings: ['Temas con BPM, tono y análisis', 'Playlists, carpetas y My Tags', 'Historial de sesiones: de ahí salen las sugerencias'] },
-  traktor: { logo: logoTraktor, ratio: '999 / 147', h: 27, brings: ['Temas con BPM, tono y rating', 'Playlists y smartlists', 'Historial con el deck y cuánto sonó cada tema'] },
-  serato: { logo: logoSerato, ratio: '2000 / 476', h: 34, brings: ['Temas con BPM, tono, rating y reproducciones', 'Crates y smart crates', 'Historial con lo que de verdad sonó'] },
+  rekordbox: { logo: logoRekordbox, ratio: '1916 / 325', h: 34, brings: ['Tus temas con BPM y tono', 'Playlists y My Tags', 'Historial de sets, para sugerirte qué poner después'] },
+  traktor: { logo: logoTraktor, ratio: '999 / 147', h: 27, brings: ['Tus temas con BPM, tono y estrellas', 'Playlists', 'Historial de sets, para sugerirte qué poner después'] },
+  serato: { logo: logoSerato, ratio: '2000 / 476', h: 34, brings: ['Tus temas con BPM, tono y estrellas', 'Crates', 'Historial de sets, para sugerirte qué poner después'] },
 }
 
 function cardStatus(source: LibrarySource): string {
-  const parts = ['Encontrado']
-  if (source.version) parts.push(`versión ${source.version}`)
+  const parts: string[] = []
+  if (source.version) parts.push(`Versión ${source.version}`)
   if (source.detail) parts.push(source.detail)
   else if (source.track_count) parts.push(`${source.track_count.toLocaleString('es-AR')} temas`)
-  return parts.join(' · ')
+  return parts.join(' · ') || 'Está en esta Mac'
 }
 
 /** Primera pantalla: solo la pregunta. Las diapositivas aparecen después, mientras se importa. */
@@ -365,7 +365,7 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
           <div className="su-group su-confirm">
             <div className="su-head">
               <h1>¿Entrar sin importar nada?</h1>
-              <p>Bateas, Mapa y Sugerencias van a estar vacías hasta que traigas tu música. Podés hacerlo cuando quieras desde Fuentes, en la barra lateral.</p>
+              <p>Sin música, Bateas, Mapa y Sugerencias quedan vacías. Podés traerla después con el botón Programas, abajo a la izquierda.</p>
             </div>
             <div className="wl-cta-row">
               <button className="btn ghost" autoFocus disabled={busy} onClick={() => setConfirming(false)}>Volver</button>
@@ -377,7 +377,7 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
         <main className="su-body">
           <div className="su-head">
             <h1>Bienvenido a Batea</h1>
-            <p>Elegí qué querés traer. No se importa, no se busca y no se analiza nada hasta que lo confirmes.</p>
+            <p>Marcá de dónde traer tu música. Hasta que toques Empezar, Batea no lee nada.</p>
           </div>
           <section className="su-cards" aria-label="Qué traer">
             {sources.map((source) => {
@@ -393,12 +393,12 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
                     </span>
                     <span className="su-card-status">
                       {source.found
-                        ? <>{cardStatus(source)}{source.app_running && <em>Está abierto: se leen los datos del último guardado</em>}</>
-                        : 'No lo encontré en esta Mac'}
+                        ? <>{cardStatus(source)}{source.app_running && <em>Está abierto. Batea ve lo último que guardaste.</em>}</>
+                        : 'No está en esta Mac'}
                     </span>
                     {info && <ul className="su-brings">{info.brings.map((b) => <li key={b}>{b}</li>)}</ul>}
                   </button>
-                  {!source.found && <button className="wl-link su-card-extra" disabled={locked} onClick={() => void locate(source)}>Está en otra carpeta…</button>}
+                  {!source.found && <button className="wl-link su-card-extra" disabled={locked} onClick={() => void locate(source)}>Lo tengo en otra carpeta…</button>}
                 </div>
               )
             })}
@@ -407,17 +407,17 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
                 onClick={() => setSearch(search === 'none' ? (path ? 'folder' : 'all') : 'none')}>
                 <span className="wl-mark check su-card-mark">{search !== 'none' && <IconCheck size={11} />}</span>
                 <span className="su-logo-box"><span className="su-logo-own"><IconFolder size={22} /> Tu música</span></span>
-                <span className="su-card-status">Archivos que no están en ningún programa</span>
+                <span className="su-card-status">Temas que no cargaste en ningún programa</span>
                 <ul className="su-brings">
-                  <li>Temas sueltos de tu Mac y tus discos</li>
-                  <li>BPM, tono y energía los calcula Batea, cuando lo pidas</li>
+                  <li>Busca en tu Mac, en tus discos o en una carpeta</li>
+                  <li>Batea calcula BPM, tono y energía cuando se lo pedís</li>
                 </ul>
               </button>
               {search !== 'none' && (
                 <div className="su-card-choices" role="radiogroup" aria-label="Dónde buscar">
-                  <Option on={search === 'all'} disabled={locked} onSelect={() => setSearch('all')} title="Toda la Mac y los discos">Solo lee. macOS va a pedir permisos.</Option>
+                  <Option on={search === 'all'} disabled={locked} onSelect={() => setSearch('all')} title="Toda la Mac y los discos">macOS te va a pedir permiso. Batea solo lee.</Option>
                   <Option on={search === 'folder'} disabled={locked} onSelect={() => (path ? setSearch('folder') : void pickFolder())} title="Solo una carpeta">
-                    {path ? <code>{path}</code> : 'Elegís cuál.'}
+                    {path ? <code>{path}</code> : 'Elegila vos.'}
                   </Option>
                   {path && search === 'folder' && <button className="wl-link su-card-extra" disabled={locked} onClick={() => void pickFolder()}>Cambiar carpeta</button>}
                 </div>
@@ -425,7 +425,7 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
             </div>
           </section>
           <div className="su-foot">
-            <span className="faint">De cada programa se lee una copia: nunca se modifica nada en rekordbox, Traktor ni Serato. Podés marcar varios.</span>
+            <span className="faint">Podés marcar más de uno. Batea lee una copia y nunca cambia nada en tus programas.</span>
             <button className="btn primary wl-cta" disabled={locked || (search === 'folder' && !path)} onClick={() => nothing ? setConfirming(true) : onStart(plan)}>
               {nothing ? 'Entrar sin importar nada' : 'Empezar'}
             </button>
@@ -527,13 +527,13 @@ function LoadingPanel({ load, plan, finish }: { load: Load; plan: SetupPlan; fin
   let title = 'Preparando todo…'
   let sub = 'Arrancando lo que elegiste.'
   if (activeSource) { title = `Importando tu librería de ${sourceLabel(activeSource)}`; sub = active?.message || 'Leyendo la librería…' }
-  if (active?.kind === 'discover') { title = 'Buscando música propia'; sub = active.message || 'Recorriendo carpetas…' }
+  if (active?.kind === 'discover') { title = 'Buscando tu música'; sub = active.message || 'Recorriendo carpetas…' }
   if (done) {
-    title = failed ? 'Quedaron pasos pendientes' : empty ? 'Batea quedó vacía, por ahora' : 'Tu librería está lista'
+    title = failed ? 'Algo no se pudo leer' : empty ? 'Batea quedó vacía, por ahora' : 'Tu librería está lista'
     sub = failed
-      ? 'Podés volver a intentarlo desde Fuentes o desde «Analizar e importar».'
+      ? 'Probá de nuevo con el botón Programas, abajo a la izquierda, o desde «Analizar e importar».'
       : empty
-        ? 'Podés traer música desde Fuentes o «Analizar e importar».'
+        ? 'Traé música con el botón Programas, abajo a la izquierda, o desde «Analizar e importar».'
         : `${fmt(tracks)} temas${local ? `, ${fmt(local)} fuera de tus programas` : ''}.`
   }
   const progress = done ? 1 : active?.progress ?? 0
@@ -549,8 +549,8 @@ function LoadingPanel({ load, plan, finish }: { load: Load; plan: SetupPlan; fin
         </div>
         <div className={`wl-bar${!done && !active ? ' indet' : ''}`}><i style={{ width: `${Math.max(2, progress * 100)}%` }} /></div>
         <ul className="wl-steps">
-          {sourceSteps.map(({ kind, job }) => <Step key={kind} job={job} done={done}>Leer {sourceLabel(kind)} (solo lectura)</Step>)}
-          {plan.search !== 'none' && <Step job={discover} done={done}>{plan.search === 'folder' ? 'Revisar la carpeta que elegiste' : 'Buscar música propia'}</Step>}
+          {sourceSteps.map(({ kind, job }) => <Step key={kind} job={job} done={done}>Leer {sourceLabel(kind)}</Step>)}
+          {plan.search !== 'none' && <Step job={discover} done={done}>{plan.search === 'folder' ? 'Revisar la carpeta que elegiste' : 'Buscar tu música'}</Step>}
         </ul>
         {active?.kind === 'discover' && plan.search === 'all' && <p className="wl-hint">Si macOS pide permiso para leer carpetas o discos, aceptá. Batea solo lee.</p>}
       </div>

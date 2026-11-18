@@ -17,16 +17,16 @@ function readDismissed(): string[] {
 }
 
 function sourceStatus(source: LibrarySource): string {
-  if (!source.found) return 'No encontrado'
-  if (source.app_running) return `Datos del último guardado · ${source.label} está abierto`
+  if (!source.found) return 'No está en esta Mac'
+  if (source.app_running) return `${source.label} está abierto. Batea ve lo último que guardaste.`
   const time = source.last_sync ? new Date(source.last_sync).getTime() : NaN
-  if (!Number.isFinite(time)) return source.detail || 'Todavía sin sincronizar'
+  if (!Number.isFinite(time)) return source.detail || 'Todavía no lo leí'
   const minutes = Math.max(0, Math.floor((Date.now() - time) / 60000))
-  if (minutes === 0) return 'Sincronizado recién'
+  if (minutes === 0) return 'Leído recién'
   const since = minutes < 60 ? relativeTime.format(-minutes, 'minute')
     : minutes < 1440 ? relativeTime.format(-Math.floor(minutes / 60), 'hour')
       : relativeTime.format(-Math.floor(minutes / 1440), 'day')
-  return `Sincronizado ${since}`
+  return `Leído ${since}`
 }
 
 export function Sources() {
@@ -142,14 +142,14 @@ export function Sources() {
         <div className="source-line">
           <div className="source-info">
             <b>{name}</b>
-            <span className="muted">{syncJob ? (isQueuedJob(syncJob) ? 'Sincronización en espera' : 'Sincronización en curso') : sourceStatus(source)}</span>
+            <span className="muted">{syncJob ? (isQueuedJob(syncJob) ? 'En espera…' : 'Leyendo…') : sourceStatus(source)}</span>
           </div>
           {source.enabled ? (
             <button className="btn sm" disabled={!source.found || !!syncJob || pending} onClick={() => void run(async () => {
               trackJob(await (legacy ? api.sync() : syncSource(source.kind)))
-            })}>Sincronizar</button>
+            })}>Actualizar</button>
           ) : source.found && (
-            <button className="btn sm" disabled={pending || !!syncJob} onClick={() => void toggleSource(source)}>Activar</button>
+            <button className="btn sm" disabled={pending || !!syncJob} onClick={() => void toggleSource(source)}>Usar</button>
           )}
           {!legacy && <button className="btn ghost sm icon" aria-label={`Opciones de ${name}`} aria-expanded={expanded} onClick={() => setMenu(expanded ? null : source.kind)}>···</button>}
         </div>
@@ -157,12 +157,12 @@ export function Sources() {
           <div className="source-menu">
             {source.locations.length > 0 && (
               <details>
-                <summary>{source.locations.length > 1 ? 'Ver rutas' : 'Ver ruta'}</summary>
+                <summary>{source.locations.length > 1 ? 'Dónde están' : 'Dónde está'}</summary>
                 {source.locations.map(({ path, volume }) => <div className="muted" key={path}>{volume ? `${volume} · ` : ''}<code>{path}</code></div>)}
               </details>
             )}
             <button className="btn ghost sm" disabled={pending || !!syncJob} onClick={() => void locate(source)}>Cambiar carpeta…</button>
-            <button className="btn ghost sm" disabled={pending || !!syncJob} onClick={() => void toggleSource(source)}>{source.enabled ? 'Desactivar' : 'Activar'}</button>
+            <button className="btn ghost sm" disabled={pending || !!syncJob} onClick={() => void toggleSource(source)}>{source.enabled ? 'Dejar de usar' : 'Usar'}</button>
           </div>
         )}
       </div>
@@ -173,9 +173,9 @@ export function Sources() {
     <>
       {notice && (
         <div className="source-notice">
-          <span>Encontré {notice.label}. ¿Importarlo?</span>
+          <span>Encontré {notice.label} en esta Mac. ¿Traigo tu librería?</span>
           <div>
-            <button className="btn sm" disabled={pending} onClick={() => void toggleSource(notice)}>Importar</button>
+            <button className="btn sm" disabled={pending} onClick={() => void toggleSource(notice)}>Traer</button>
             <button className="btn ghost sm" disabled={pending} onClick={() => dismiss(notice.kind)}>No</button>
           </div>
         </div>
@@ -190,14 +190,14 @@ export function Sources() {
             setSourcesOpen(!sourcesOpen)
             if (!sourcesOpen && !legacy) void refreshSources().catch(() => undefined)
           }}
-        >Fuentes</button>
+        >Programas</button>
         {shown && (
-          <section id="library-sources" aria-label="Fuentes" className={`popover sources-pop${closing ? ' closing' : ''}`} inert={closing}>
+          <section id="library-sources" aria-label="Programas" className={`popover sources-pop${closing ? ' closing' : ''}`} inert={closing}>
             <div className="source-line">
-              <span className="eyebrow">Fuentes</span>
+              <span className="eyebrow">Tus programas</span>
               {!legacy && (
                 <button className="btn sm" disabled={pending || Boolean(syncing.size) || !enabled.some((source) => source.found)} onClick={() => void syncAll()}>
-                  <IconSync size={13} /> Sincronizar todo
+                  <IconSync size={13} /> Actualizar todos
                 </button>
               )}
             </div>
@@ -205,17 +205,17 @@ export function Sources() {
             {savedInactive.map(renderRow)}
             <div className="source-line source-row">
               <div className="source-info">
-                <b>Música propia</b>
-                <span className="muted">Búsqueda automática {status?.autodiscover ? 'activada' : 'desactivada'}</span>
+                <b>Tu música</b>
+                <span className="muted">{status?.autodiscover ? 'Busca sola al abrir Batea y al conectar un disco' : 'Búsqueda automática apagada'}</span>
               </div>
-              <button className="btn sm ghost" aria-label={`${status?.autodiscover ? 'Desactivar' : 'Activar'} la búsqueda automática`} disabled={pending} onClick={() => void toggleAuto()}>
-                {status?.autodiscover ? 'Desactivar' : 'Activar'}
+              <button className="btn sm ghost" aria-label={`${status?.autodiscover ? 'Apagar' : 'Prender'} la búsqueda automática`} disabled={pending} onClick={() => void toggleAuto()}>
+                {status?.autodiscover ? 'Apagar' : 'Prender'}
               </button>
             </div>
             {!legacy && (
               <div className="sources-add">
-                <button className="btn sm ghost" aria-expanded={adding} onClick={() => setAdding(!adding)}><IconPlus size={13} /> Agregar otra fuente…</button>
-                {adding && (foundInactive.length ? foundInactive.map(renderRow) : <div className="muted">No encontré otras fuentes en esta Mac.</div>)}
+                <button className="btn sm ghost" aria-expanded={adding} onClick={() => setAdding(!adding)}><IconPlus size={13} /> Agregar otro programa…</button>
+                {adding && (foundInactive.length ? foundInactive.map(renderRow) : <div className="muted">No hay otros programas de DJ en esta Mac.</div>)}
               </div>
             )}
           </section>

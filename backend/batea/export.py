@@ -14,27 +14,27 @@ TARGET_IDS = ("rekordbox", "traktor", "serato", "m3u")
 _TARGETS = {
     "rekordbox": dict(
         label="rekordbox", format="XML",
-        carries=["Playlists en orden", "Rating, comentario y color", "BPM y tono", "Etiquetas en el comentario (opcional)"],
-        loses=["Cues y grillas de Batea"],
-        how_to_load="Preferencias → Avanzado → Base de datos → rekordbox xml → elegí el archivo; aparece en la barra lateral",
+        carries=["Las cajas, en orden", "Rating, comentario y color", "BPM y tono", "Tus etiquetas, en el comentario (si lo marcás)"],
+        loses=["Cues y grillas"],
+        how_to_load="En rekordbox: Preferencias → Avanzado → Base de datos → rekordbox xml, y elegí el archivo. Las cajas aparecen en la barra lateral.",
     ),
     "traktor": dict(
         label="Traktor", format="NML",
-        carries=["Playlists y carpetas, en orden", "Título, artista, género, comentario", "BPM, tono y rating"],
-        loses=["Cues, loops y grillas", "Etiquetas de Batea", "Color y energía"],
-        how_to_load="En el explorador, clic derecho en Playlists → Import Playlist y elegí el archivo. Con Traktor cerrado y vuelto a abrir, o guardá la colección después",
+        carries=["Las cajas y carpetas, en orden", "Título, artista, género y comentario", "BPM, tono y rating"],
+        loses=["Cues, loops y grillas", "Etiquetas, color y energía"],
+        how_to_load="En Traktor: clic derecho en Playlists → Import Playlist, y elegí el archivo. Después guardá la colección.",
     ),
     "serato": dict(
         label="Serato", format="M3U8",
-        carries=["Una lista por caja, en orden"],
-        loses=["Cues y grillas", "Etiquetas, rating y comentarios", "Carpetas (quedan como carpetas en disco)"],
-        how_to_load="Arrastrá el archivo .m3u8 al panel de crates de Serato",
+        carries=["Cada caja como una lista, en orden"],
+        loses=["Cues y grillas", "Etiquetas, rating y comentarios", "Las carpetas de cajas (quedan como carpetas en el disco)"],
+        how_to_load="Arrastrá el archivo .m3u8 a la columna de crates de Serato.",
     ),
     "m3u": dict(
-        label="Lista M3U8", format="M3U8",
-        carries=["Una lista por caja, en orden", "Artista, título y duración"],
-        loses=["Cues, tonos, BPM y etiquetas"],
-        how_to_load="Abrilo o arrastralo en cualquier programa que acepte listas M3U",
+        label="Otro programa (M3U)", format="M3U8",
+        carries=["Cada caja como una lista, en orden", "Artista, título y duración"],
+        loses=["BPM, tono, cues y etiquetas"],
+        how_to_load="Arrastralo a cualquier programa que acepte listas M3U.",
     ),
 }
 
@@ -46,7 +46,7 @@ def targets(sources: list[dict]) -> list[dict]:
         spec = dict(_TARGETS[tid])
         s = by.get(tid)
         ok = tid == "m3u" or bool(s and (s["enabled"] or s["found"]))
-        out.append({"id": tid, **spec, "available": ok, "reason": None if ok else f"No usás {spec['label']}"})
+        out.append({"id": tid, **spec, "available": ok, "reason": None if ok else f"No encontré {spec['label']} en esta Mac"})
     return out
 
 

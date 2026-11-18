@@ -15,7 +15,7 @@ from .sources.base import KINDS
 VIRTUAL_CRATES = {
     "all": "Toda la colección",
     "inbox": "Sin clasificar",
-    "local": "Música propia",
+    "local": "Tu música",
     "recent": "Agregados (60 días)",
     "top": "Mejor puntuados",
     "hidden": "Eliminados de Batea",

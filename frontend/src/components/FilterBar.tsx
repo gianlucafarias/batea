@@ -90,7 +90,7 @@ export function FilterBar({ filters, onChange, onSaveSmart, counts }: Props) {
   if (filters.energy_min || filters.energy_max) active.push({ label: `Energía ${filters.energy_min ?? 1}–${filters.energy_max ?? 10}`, clear: () => set({ energy_min: undefined, energy_max: undefined }) })
   if (filters.rating_min) active.push({ label: `★ ${filters.rating_min}+`, clear: () => set({ rating_min: undefined }) })
   if (filters.in_source) active.push({
-    label: filters.in_source === 'none' ? 'En ningún programa' : `En ${sourceLabel(filters.in_source)}`,
+    label: filters.in_source === 'none' ? 'Solo tu música' : `En ${sourceLabel(filters.in_source)}`,
     clear: () => set({ in_source: undefined }),
   })
   if (filters.key_compat) active.push({ label: `Compatible ${filters.key_compat}`, clear: () => set({ key_compat: undefined }), color: keyColor(filters.key_compat) })
@@ -130,11 +130,11 @@ export function FilterBar({ filters, onChange, onSaveSmart, counts }: Props) {
               </div>
               {multiSource && (
                 <label className="range-row">
-                  <span className="eyebrow">Está en</span>
+                  <span className="eyebrow">Programa</span>
                   <select className="input" style={{ gridColumn: 'span 2' }} value={filters.in_source ?? ''} onChange={(e) => set({ in_source: e.target.value || undefined })}>
-                    <option value="">Cualquiera</option>
+                    <option value="">Todos</option>
                     {sourceOptions.map((kind) => <option key={kind} value={kind}>{sourceLabel(kind)}</option>)}
-                    <option value="none">Ninguno</option>
+                    <option value="none">Ninguno (tu música)</option>
                   </select>
                 </label>
               )}

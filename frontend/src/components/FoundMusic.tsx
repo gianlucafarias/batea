@@ -129,7 +129,7 @@ export function FoundMusic() {
   return (
     <div className="card">
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-        <h3>Música propia</h3>
+        <h3>Tu música</h3>
         <span className="muted num">{total.toLocaleString('es-AR')} {total === 1 ? 'tema' : 'temas'}</span>
         <div style={{ flex: 1 }} />
         <button className="btn" onClick={pick}><IconFolder size={14} /> Traer una carpeta…</button>

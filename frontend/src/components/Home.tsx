@@ -73,11 +73,11 @@ export function Home() {
       <div className="home">
         <div className="empty" style={{ marginTop: 80 }}>
           <h3>Batea está vacía</h3>
-          <p>{status.sources ? 'Traé tu librería desde Fuentes o elegí una carpeta con música.' : status.rekordbox_found
+          <p>{status.sources ? 'Traé tu librería de rekordbox, Traktor o Serato, o elegí una carpeta con música.' : status.rekordbox_found
             ? 'Traé tu librería de rekordbox o una carpeta con música.'
             : 'No encontré rekordbox. Traé una carpeta con música o arrastrala a la ventana.'}</p>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            {status.sources ? <button className="btn primary" onClick={() => setSourcesOpen(true)}>Abrir Fuentes</button>
+            {status.sources ? <button className="btn primary" onClick={() => setSourcesOpen(true)}>Ver programas</button>
               : status.rekordbox_found && <button className="btn primary" onClick={async () => trackJob(await api.sync())}><IconSync size={14} /> Importar rekordbox</button>}
             <button className="btn" onClick={() => go('inbox')}>Analizar carpeta</button>
           </div>

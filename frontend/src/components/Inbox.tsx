@@ -27,9 +27,9 @@ export function Inbox() {
         <div>
           {status?.sources ? (
             <div className="card">
-              <h3>Librerías de DJ</h3>
-              <p>Importá tus temas, playlists e historial desde Fuentes. Batea lee una copia de cada librería.</p>
-              <div><button className="btn primary" onClick={() => setSourcesOpen(true)}>Abrir Fuentes</button></div>
+              <h3>Tus programas de DJ</h3>
+              <p>Traé temas, playlists e historial de rekordbox, Traktor o Serato. Batea lee una copia y no les cambia nada.</p>
+              <div><button className="btn primary" onClick={() => setSourcesOpen(true)}>Ver programas</button></div>
             </div>
           ) : <div className="card">
             <h3>rekordbox</h3>
@@ -85,7 +85,7 @@ export function Inbox() {
 
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 12px' }}>
-            <h3>Música propia</h3>
+            <h3>Tu música</h3>
             <span className="muted num">{local.length}</span>
             <div style={{ flex: 1 }} />
             {local.length > 0 && <button className="btn sm" onClick={() => setExportOpen(true)}>Exportar…</button>}

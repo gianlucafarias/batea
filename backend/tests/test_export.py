@@ -184,7 +184,7 @@ class TargetsTests(unittest.TestCase):
         self.assertTrue(ts["rekordbox"]["available"])
         self.assertTrue(ts["traktor"]["available"])
         self.assertFalse(ts["serato"]["available"])
-        self.assertEqual(ts["serato"]["reason"], "No usás Serato")
+        self.assertEqual(ts["serato"]["reason"], "No encontré Serato en esta Mac")
         self.assertTrue(ts["m3u"]["available"])
         self.assertIsNone(ts["m3u"]["reason"])
         self.assertEqual([t["format"] for t in ts.values()], ["XML", "NML", "M3U8", "M3U8"])
