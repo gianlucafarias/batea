@@ -184,10 +184,10 @@ export function SourcesPanel() {
       <div className="source-line source-row">
         <div className="source-info">
           <b>Tu música</b>
-          <span className="muted">{status?.autodiscover ? 'Busca sola al abrir Batea y al conectar un disco' : 'Búsqueda automática apagada'}</span>
+          <span className="muted">Buscar sola al abrir Batea y al conectar un disco</span>
         </div>
-        <button className="btn sm ghost" aria-label={`${status?.autodiscover ? 'Apagar' : 'Prender'} la búsqueda automática`} disabled={pending} onClick={() => void toggleAuto()}>
-          {status?.autodiscover ? 'Apagar' : 'Prender'}
+        <button type="button" role="switch" className="switch" aria-checked={!!status?.autodiscover} aria-label="Búsqueda automática" disabled={pending} onClick={() => void toggleAuto()}>
+          <i />
         </button>
       </div>
       {!legacy && (

@@ -1013,3 +1013,10 @@ kbd {
 .settings-sources > .source-line:first-child { font-size: 12.5px; gap: 12px; }
 .settings-foot { display: flex; justify-content: flex-end; }
 .side-foot .source-notice { margin-bottom: 6px; }
+/* interruptor */
+.switch { flex: none; position: relative; width: 34px; height: 20px; padding: 0; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--line-2); transition: background-color var(--moderate) var(--ease), border-color var(--moderate) var(--ease); }
+.switch i { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text-2); transition: transform var(--moderate) var(--spring), background-color var(--moderate) var(--ease); }
+.switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.switch[aria-checked="true"] i { transform: translateX(14px); background: #fff; }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch:disabled { opacity: 1; }  /* sin parpadeo mientras se guarda */
