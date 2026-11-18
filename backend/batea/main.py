@@ -149,9 +149,9 @@ def _log_to_file() -> None:
 def _start_traktor_broadcast() -> None:
     """Escucha de Traktor (Broadcasting) para "ahora suena"; si el módulo no está o falla, no frena el arranque."""
     try:
-        from . import traktor_broadcast
+        from . import live_settings
 
-        traktor_broadcast.start_if_enabled()
+        live_settings.apply()  # Broadcasting solo si "Saber qué suena" está prendido con Traktor o Detectar solo
     except ImportError:
         pass
     except Exception as e:  # noqa: BLE001

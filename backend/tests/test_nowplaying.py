@@ -11,7 +11,7 @@ from batea.live_base import LiveReading, PlayRef
 from tests.fixtures.serato.build import BASS, GARDEN, LOAD_ONLY, SUN, VOLUME, legacy_library, modern_library
 
 OLD_KEYS = {"rekordbox", "source", "now", "loaded", "recs", "session", "played", "open_files"}
-NEW_KEYS = {"app", "app_label", "running", "note"}
+NEW_KEYS = {"app", "app_label", "running", "note", "enabled", "mode"}
 
 
 def abs_(p):
@@ -210,3 +210,40 @@ class NowPlayingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LiveSettingsTests(unittest.TestCase):
+    """Ajuste general: apagado no lee nada; con un programa elegido, solo ese."""
+
+    def setUp(self):
+        from batea import live_settings
+        self.c = sqlite3.connect(":memory:")
+        self.c.row_factory = sqlite3.Row
+        self.addCleanup(self.c.close)
+        self.c.executescript(db.SCHEMA)
+        self.ls = live_settings
+        self.enterContext(patch.object(live_settings, "apply", lambda s=None: None))
+
+    def test_default_on_auto(self):
+        self.assertEqual(self.ls.get(self.c), {"enabled": True, "app": "auto"})
+
+    def test_off_returns_nothing(self):
+        from unittest import mock
+        self.ls.set(self.c, enabled=False)
+        with mock.patch.object(nowplaying, "_rb_scan", side_effect=AssertionError("no debería mirar procesos")):
+            res = nowplaying.state(self.c, 5)
+        self.assertIs(res["enabled"], False)
+        self.assertIsNone(res["now"])
+
+    def test_forced_app_not_running(self):
+        from unittest import mock
+        self.ls.set(self.c, app="serato")
+        with mock.patch.object(nowplaying, "_rb_scan", return_value=(123, [], 0.0)), \
+             mock.patch.object(nowplaying, "_readers", return_value={}):
+            res = nowplaying.state(self.c, 5)
+        self.assertIsNone(res["app"])
+        self.assertEqual(res["note"], "Serato no está abierto")
+
+    def test_unknown_app(self):
+        with self.assertRaises(ValueError):
+            self.ls.set(self.c, app="virtualdj")

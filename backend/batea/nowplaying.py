@@ -320,11 +320,21 @@ def _label(app: str | None, readers: dict) -> str | None:
 
 
 def state(c: sqlite3.Connection, limit: int = 8) -> dict:
+    from . import live_settings
+
+    settings = live_settings.get(c)
+    if not settings["enabled"]:
+        _seen.clear()
+        return {"rekordbox": False, "now": None, "loaded": [], "recs": [], "source": None,
+                "enabled": False, "app": None, "app_label": None, "running": [], "note": None, "mode": settings["app"]}
     with _lock:
         readers = _readers()
         pid, files, rb_activity = _rb_scan()
         run = (["rekordbox"] if pid is not None else []) + [a for a, m in readers.items() if _is_running(m)]
         run.sort(key=lambda a: ORDER.index(a) if a in ORDER else len(ORDER))
+        forced = settings["app"] if settings["app"] != "auto" else None
+        if forced:
+            run = [a for a in run if a == forced]
 
         extra: dict[str, LiveReading] = {}
         for app in run:
@@ -343,12 +353,12 @@ def state(c: sqlite3.Connection, limit: int = 8) -> dict:
 
         if chosen is None:
             res = {"rekordbox": False, "now": None, "loaded": [], "recs": [], "source": None}
-            note = None
+            note = f"{_label(forced, readers)} no está abierto" if forced else None
         elif chosen == "rekordbox":
             res = _rekordbox_state(c, limit, files)
             note = None
         else:
             res = _live_state(c, extra[chosen], limit)
             note = extra[chosen].note
-        res.update(app=chosen, app_label=_label(chosen, readers), running=run, note=note)
+        res.update(app=chosen, app_label=_label(chosen, readers), running=run, note=note, enabled=True, mode=settings["app"])
         return res

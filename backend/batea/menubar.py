@@ -220,9 +220,13 @@ class Panel(NSObject):
             self.hdr.setStringValue_("BATEA")
             self.nowTitle.setStringValue_("No encuentro Batea abierta")
             self.nowMeta.setStringValue_("")
+        elif data.get("enabled") is False:
+            self.hdr.setStringValue_("SONANDO AHORA")
+            self.nowTitle.setStringValue_("Está apagado")
+            self.nowMeta.setStringValue_("Prendelo en Batea → Ajustes → Programas")
         elif not data.get("app"):
             self.hdr.setStringValue_("SONANDO AHORA")
-            self.nowTitle.setStringValue_("No hay ningún programa abierto")
+            self.nowTitle.setStringValue_(note or "No hay ningún programa abierto")
             self.nowMeta.setStringValue_("Abrí rekordbox, Serato o Traktor y cargá un tema")
         elif not data.get("now"):
             self.hdr.setStringValue_(f"{label.upper()}")

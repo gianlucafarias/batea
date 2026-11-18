@@ -104,6 +104,9 @@ export interface LibrarySource {
   locations: { path: string; version: string | null; volume: string | null; modified: number | string | null }[]
 }
 
+export type LiveApp = 'auto' | 'rekordbox' | 'serato' | 'traktor'
+export interface LiveSettings { enabled: boolean; app: LiveApp }
+
 export interface TraktorBroadcast {
   enabled: boolean
   port: number
@@ -146,6 +149,8 @@ export const api = {
   setupLegacy: ({ sources, search, path }: SetupPlan) =>
     post<SetupResult>('/api/setup', { rekordbox: sources.includes('rekordbox'), search, path }),
   sources: () => get<{ sources: LibrarySource[] }>('/api/sources'),
+  liveSettings: () => get<LiveSettings>('/api/live/settings'),
+  setLiveSettings: (patch: Partial<LiveSettings>) => post<LiveSettings>('/api/live/settings', patch),
   traktorBroadcast: () => get<TraktorBroadcast>('/api/live/traktor-broadcast'),
   setTraktorBroadcast: (enabled: boolean, port?: number) =>
     post<TraktorBroadcast>('/api/live/traktor-broadcast', { enabled, port }),

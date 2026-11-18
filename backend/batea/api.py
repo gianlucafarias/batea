@@ -1165,6 +1165,31 @@ def traktor_broadcast_configure(body: TraktorBroadcastIn) -> dict:
         raise HTTPException(400, str(exc)) from exc
 
 
+# ---------------------------------------------------------------- saber qué suena (ajuste general)
+class LiveSettingsIn(BaseModel):
+    enabled: bool | None = None
+    app: str | None = None
+
+
+@app.get("/api/live/settings")
+def live_settings_get() -> dict:
+    from . import live_settings
+
+    with db.conn() as c:
+        return live_settings.get(c)
+
+
+@app.post("/api/live/settings")
+def live_settings_set(body: LiveSettingsIn) -> dict:
+    from . import live_settings
+
+    try:
+        with db.conn() as c:
+            return live_settings.set(c, body.enabled, body.app)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 # ---------------------------------------------------------------- frontend
 if config.FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=config.FRONTEND_DIST / "assets"), name="assets")

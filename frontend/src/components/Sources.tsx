@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, isNotFound, type LibrarySource, type TraktorBroadcast } from '../api'
+import { api, isNotFound, type LibrarySource, type LiveApp, type LiveSettings, type TraktorBroadcast } from '../api'
 import { crateSource, isActiveJob, isQueuedJob, legacyRekordbox, pickSourcePath, sourceName, syncJobSource, syncSource } from '../sources'
 import { useApp } from '../store'
 import type { Job } from '../types'
@@ -130,10 +130,8 @@ export function SourcesNotice() {
 function TraktorLive() {
   const toast = useApp((state) => state.toast)
   const [broadcast, setBroadcast] = useState<TraktorBroadcast | null>(null)
-  const [pending, setPending] = useState(false)
 
   useEffect(() => {
-    if (pending) return
     let active = true
     let timer: number | undefined
     const refresh = async () => {
@@ -141,7 +139,6 @@ function TraktorLive() {
         const next = await api.traktorBroadcast()
         if (!active) return
         setBroadcast(next)
-        if (!next.enabled) return
       } catch (error) {
         if (!active) return
         if (isNotFound(error)) {
@@ -156,10 +153,10 @@ function TraktorLive() {
       active = false
       window.clearTimeout(timer)
     }
-  }, [pending])
+  }, [])
 
   if (!broadcast) return null
-  const { enabled, port, mount, password, connected, last, error } = broadcast
+  const { port, mount, password, connected, last, error } = broadcast
   const fields = [
     ['Address', 'localhost'],
     ['Port', String(port)],
@@ -167,17 +164,6 @@ function TraktorLive() {
     ['Password', password],
     ['Format', 'Ogg Vorbis'],
   ]
-  const label = 'Saber qué suena en Traktor'
-  const toggle = async () => {
-    setPending(true)
-    try {
-      setBroadcast(await api.setTraktorBroadcast(!enabled))
-    } catch (error) {
-      toast((error as Error).message, 'error')
-    } finally {
-      setPending(false)
-    }
-  }
   const copy = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value)
@@ -203,32 +189,77 @@ function TraktorLive() {
   }
 
   return (
-    <div className="source-row traktor-live-settings">
+    <div className="traktor-live">
+      <p>Traktor no avisa qué suena hasta que se cierra. Para saberlo en vivo, Traktor le transmite a Batea por <b>Broadcasting</b>: solo viaja el nombre de cada tema, dentro de tu Mac.</p>
+      <ol className="traktor-live-steps">
+        <li>En Traktor, abrí <b>Preferences → Broadcasting</b> y completá estos datos:</li>
+      </ol>
+      <dl className="traktor-live-fields">
+        {fields.map(([name, value]) => (
+          <div key={name}>
+            <dt>{name}</dt>
+            <dd>
+              <code>{value}</code>{name === 'Format' && <span className="muted">Cualquier calidad</span>}
+              <button type="button" className="btn ghost sm" aria-label={`Copiar ${name}`} onClick={() => void copy(value)}>Copiar</button>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <ol className="traktor-live-steps" start={2}>
+        <li>Tocá el botón de Broadcasting (la antena) arriba a la derecha en Traktor. Hacelo en cada sesión.</li>
+      </ol>
+      <div role="status" className={error ? 'traktor-live-error' : 'muted'}>
+        <div>{error || (connected ? 'Conectado con Traktor' : 'Esperando a Traktor…')}</div>
+        {last && <div>Último tema: {[last.artist, last.title].filter(Boolean).join(' – ')}</div>}
+      </div>
+    </div>
+  )
+}
+
+const LIVE_APPS: { id: LiveApp; label: string; hint: string }[] = [
+  { id: 'auto', label: 'Detectar solo', hint: 'Lee el programa que esté abierto. Si hay más de uno, el que usaste último.' },
+  { id: 'rekordbox', label: 'rekordbox', hint: 'Mira qué tema está cargado en cada deck y el historial de la sesión.' },
+  { id: 'serato', label: 'Serato', hint: 'Lee el historial que Serato va anotando mientras tocás.' },
+  { id: 'traktor', label: 'Traktor', hint: 'Necesita un paso en Traktor: abajo te explico cómo.' },
+]
+
+/** Ajuste general de "Saber qué suena" (ícono de la barra de menú): prendido/apagado y de qué programa leer. */
+function LiveSection() {
+  const toast = useApp((state) => state.toast)
+  const [live, setLive] = useState<LiveSettings | null>(null)
+  const [pending, setPending] = useState(false)
+
+  useEffect(() => {
+    api.liveSettings().then(setLive).catch(() => setLive(null))
+  }, [])
+
+  if (!live) return null
+  const save = async (patch: Partial<LiveSettings>) => {
+    setPending(true)
+    try { setLive(await api.setLiveSettings(patch)) } catch (error) { toast((error as Error).message, 'error') } finally { setPending(false) }
+  }
+  const current = LIVE_APPS.find((a) => a.id === live.app) ?? LIVE_APPS[0]
+  return (
+    <div className="source-row live-section">
       <div className="source-line">
-        <div className="source-info"><b>{label}</b></div>
-        <button type="button" role="switch" className="switch" aria-label={label} aria-checked={enabled} disabled={pending} onClick={() => void toggle()}>
+        <div className="source-info">
+          <b>Saber qué suena</b>
+          <span className="muted">Muestra en la barra de menú el tema que estás tocando y qué poner después.</span>
+        </div>
+        <button type="button" role="switch" className="switch" aria-label="Saber qué suena" aria-checked={live.enabled} disabled={pending} onClick={() => void save({ enabled: !live.enabled })}>
           <i />
         </button>
       </div>
-      {enabled && (
-        <div className="traktor-live">
-          <p>En Traktor, abrí <b>Preferences → Broadcasting</b> y completá estos datos.</p>
-          <dl className="traktor-live-fields">
-            {fields.map(([name, value]) => (
-              <div key={name}>
-                <dt>{name}</dt>
-                <dd>
-                  <code>{value}</code>{name === 'Format' && <span className="muted">Cualquier calidad</span>}
-                  <button type="button" className="btn ghost sm" aria-label={`Copiar ${name}`} onClick={() => void copy(value)}>Copiar</button>
-                </dd>
-              </div>
-            ))}
-          </dl>
-          <p>Tocá el botón de Broadcasting (la antena) en el panel de Traktor.</p>
-          <div role="status" className={error ? 'traktor-live-error' : 'muted'}>
-            <div>{error || (connected ? 'Conectado' : 'Esperando a Traktor')}</div>
-            {last && <div>Último tema · {[last.artist, last.title].filter(Boolean).join(' – ')}</div>}
-          </div>
+      {live.enabled && (
+        <div className="live-app">
+          <label className="live-app-row">
+            <span>Programa</span>
+            <select className="input" value={live.app} disabled={pending} onChange={(e) => void save({ app: e.target.value as LiveApp })}>
+              {LIVE_APPS.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+            </select>
+          </label>
+          <span className="muted">{current.hint}</span>
+          {live.app === 'traktor' && <TraktorLive />}
         </div>
       )}
     </div>
@@ -273,7 +304,6 @@ export function SourcesPanel() {
             <button className="btn ghost sm" disabled={pending || !!syncJob} onClick={() => { setMenu(null); void toggleSource(source) }}>{source.enabled ? 'Dejar de usar' : 'Usar'}</button>
           </div>
         )}
-        {source.kind === 'traktor' && (source.enabled || !source.found) && <TraktorLive />}
       </div>
     )
   }
@@ -290,7 +320,6 @@ export function SourcesPanel() {
       )}
       {enabled.map(renderRow)}
       {savedInactive.map(renderRow)}
-      {![...enabled, ...savedInactive].some((source) => source.kind === 'traktor') && <TraktorLive />}
       <div className="source-line source-row">
         <div className="source-info">
           <b>Tu música</b>
@@ -300,6 +329,7 @@ export function SourcesPanel() {
           <i />
         </button>
       </div>
+      <LiveSection />
       {!legacy && (
         <div className="sources-add source-row">
           <button className="btn sm ghost" aria-expanded={adding} onClick={() => setAdding(!adding)}><IconPlus size={13} /> Agregar otro programa…</button>
