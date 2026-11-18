@@ -17,7 +17,7 @@ import unicodedata
 from collections import Counter, defaultdict
 from contextlib import ExitStack, closing
 from dataclasses import dataclass, fields
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -273,7 +273,7 @@ def _timestamp(value) -> str | None:
     if seconds is None or seconds <= 0:
         return None
     try:
-        return datetime.fromtimestamp(seconds, timezone.utc).isoformat()
+        return datetime.fromtimestamp(seconds).isoformat(timespec="seconds")  # hora local, como rekordbox y Traktor
     except (ValueError, OverflowError, OSError):
         return None
 
@@ -532,7 +532,10 @@ def _deck(value) -> int | None:
 
 def _session(prefix: str, sid, name: str | None, start, plays: list[SrcPlay]) -> SrcSession:
     iso = _timestamp(start) or min((p.start for p in plays if p.start), default=None)
-    return SrcSession(prefix + str(sid), name or (f"Sesión {iso[:16].replace('T', ' ')}" if iso else f"Sesión {sid}"),
+    if not name and iso:
+        d = datetime.fromisoformat(iso)
+        name = f"Sesión {d.day}/{d.month}/{d.year:04d} {d:%H:%M}"  # mismo formato que Traktor
+    return SrcSession(prefix + str(sid), name or f"Sesión {sid}",
                       iso, plays)
 
 

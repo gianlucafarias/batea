@@ -9,7 +9,7 @@ import tempfile
 import textwrap
 import unicodedata
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -25,7 +25,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "serato"
 
 
 def iso(seconds):
-    return datetime.fromtimestamp(seconds, timezone.utc).isoformat()
+    return datetime.fromtimestamp(seconds).isoformat(timespec="seconds")
 
 
 class SeratoMappingTests(unittest.TestCase):
