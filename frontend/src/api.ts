@@ -104,6 +104,16 @@ export interface LibrarySource {
   locations: { path: string; version: string | null; volume: string | null; modified: number | string | null }[]
 }
 
+export interface TraktorBroadcast {
+  enabled: boolean
+  port: number
+  mount: string
+  password: string
+  connected: boolean
+  last: { artist: string; title: string; at: number } | null
+  error: string | null
+}
+
 export interface TrackSource {
   source: string
   label: string
@@ -136,6 +146,9 @@ export const api = {
   setupLegacy: ({ sources, search, path }: SetupPlan) =>
     post<SetupResult>('/api/setup', { rekordbox: sources.includes('rekordbox'), search, path }),
   sources: () => get<{ sources: LibrarySource[] }>('/api/sources'),
+  traktorBroadcast: () => get<TraktorBroadcast>('/api/live/traktor-broadcast'),
+  setTraktorBroadcast: (enabled: boolean, port?: number) =>
+    post<TraktorBroadcast>('/api/live/traktor-broadcast', { enabled, port }),
   syncSource: (kind: string) => post<Job>(`/api/sources/${encodeURIComponent(kind)}/sync`),
   syncAllSources: () => post<{ jobs: Job[] }>('/api/sources/sync-all'),
   setSourceEnabled: (kind: string, enabled: boolean) =>

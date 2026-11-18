@@ -756,7 +756,7 @@ def recs(tid: int, crate: str | None = None, limit: int = 30) -> dict:
 
 @app.get("/api/nowplaying")
 def now_playing(limit: int = 8) -> dict:
-    """Lo que suena en rekordbox y qué poner después (para el ícono de la barra de arriba)."""
+    """Lo que suena en el programa de DJ abierto (rekordbox, Serato o Traktor) y qué poner después (ícono de la barra de arriba)."""
     from . import nowplaying
 
     with db.conn() as c:
@@ -1140,6 +1140,29 @@ def agents_set(agent_id: str, body: AgentSet) -> dict:
 @app.post("/api/agents-test")
 def agents_test() -> dict:
     return agents.test()
+
+
+# ---------------------------------------------------------------- Traktor en vivo
+class TraktorBroadcastIn(BaseModel):
+    enabled: bool
+    port: int | None = None
+
+
+@app.get("/api/live/traktor-broadcast")
+def traktor_broadcast_status() -> dict:
+    from . import traktor_broadcast
+
+    return traktor_broadcast.status()
+
+
+@app.post("/api/live/traktor-broadcast")
+def traktor_broadcast_configure(body: TraktorBroadcastIn) -> dict:
+    from . import traktor_broadcast
+
+    try:
+        return traktor_broadcast.configure(body.enabled, body.port)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 # ---------------------------------------------------------------- frontend
