@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<NML VERSION="20">
+  <COLLECTION ENTRIES="2">
+    <ENTRY TITLE="Jardín de ecos" ARTIST="Prisma">
+      <LOCATION VOLUME="Disco DJ" DIR="/:Sets/:" FILE="Jardín.flac"/>
+      <TEMPO BPM="116.25"/>
+      <MUSICAL_KEY VALUE="7"/>
+    </ENTRY>
+    <ENTRY TITLE="Vidrio al sol" ARTIST="Línea de sombra">
+      <LOCATION VOLUME="Disco DJ" DIR="/:Sets/:" FILE="Vidrio.flac"/>
+      <TEMPO BPM="118"/>
+      <MUSICAL_KEY VALUE="20"/>
+    </ENTRY>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE TYPE="PLAYLIST" NAME="HISTORY">
+      <PLAYLIST ENTRIES="2" TYPE="PROTOCOL">
+        <ENTRY>
+          <PRIMARYKEY TYPE="TRACK" KEY="Disco DJ/:Sets/:Vidrio.flac"/>
+          <EXTENDEDDATA EXTENDEDTYPE="HistoryData" DECK="2" DURATION="171"
+                        PLAYEDPUBLIC="1" STARTDATE="132778763" STARTTIME="100"/>
+        </ENTRY>
+        <ENTRY>
+          <PRIMARYKEY TYPE="TRACK" KEY="Disco DJ/:Sets/:Jardín.flac"/>
+          <EXTENDEDDATA EXTENDEDTYPE="HistoryData" DECK="1" DURATION="210"
+                        PLAYEDPUBLIC="1" STARTDATE="132778762" STARTTIME="86220"/>
+        </ENTRY>
+      </PLAYLIST>
+    </NODE>
+  </PLAYLISTS>
+  <INDEXING/>
+</NML>

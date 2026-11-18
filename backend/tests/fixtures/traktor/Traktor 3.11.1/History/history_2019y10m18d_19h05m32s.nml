@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<NML VERSION="19">
+  <COLLECTION ENTRIES="2">
+    <ENTRY TITLE="Faro apagado" ARTIST="Humo de sal">
+      <LOCATION VOLUME="Disco DJ" DIR="/:Archivo/:" FILE="Faro.flac"/>
+      <TEMPO BPM="121.25"/>
+      <MUSICAL_KEY VALUE="13"/>
+    </ENTRY>
+    <ENTRY TITLE="Bajo de marea (en vivo)" ARTIST="Faro de papel">
+      <LOCATION VOLUME="Macintosh HD" DIR="/:Music/:" FILE="Bajo// Marea.aiff"/>
+      <TEMPO BPM="124"/>
+      <MUSICAL_KEY VALUE="14"/>
+    </ENTRY>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE TYPE="FOLDER" NAME="$ROOT">
+      <SUBNODES COUNT="1">
+        <NODE TYPE="PLAYLIST" NAME="HISTORY">
+          <PLAYLIST ENTRIES="2" TYPE="PROTOCOL">
+            <ENTRY>
+              <PRIMARYKEY TYPE="TRACK" KEY="Macintosh HD/:Music/:Bajo// Marea.aiff"/>
+              <EXTENDEDDATA EXTENDEDTYPE="HistoryData" DECK="2" DURATION="115"
+                            PLAYEDPUBLIC="1" STARTDATE="132319762" STARTTIME="68900"/>
+            </ENTRY>
+            <ENTRY>
+              <PRIMARYKEY TYPE="TRACK" KEY="Disco DJ/:Archivo/:Faro.flac"/>
+              <EXTENDEDDATA EXTENDEDTYPE="HistoryData" DECK="1" DURATION="62.5"
+                            PLAYEDPUBLIC="0" STARTDATE="132319762" STARTTIME="68839"/>
+            </ENTRY>
+          </PLAYLIST>
+        </NODE>
+      </SUBNODES>
+    </NODE>
+  </PLAYLISTS>
+</NML>

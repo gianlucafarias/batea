@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<NML VERSION="20">
+  <HEAD COMPANY="Native Instruments" PROGRAM="Traktor"/>
+  <MUSICFOLDERS/>
+  <COLLECTION ENTRIES="7">
+    <ENTRY TITLE="Bajo de marea (edición)" ARTIST="Faro de papel">
+      <LOCATION VOLUME="Macintosh HD" VOLUMEID="boot" DIR="/:Music/:" FILE="Bajo// Marea.aiff"/>
+      <ALBUM TITLE="Costa de papel" TRACK="2"/>
+      <INFO BITRATE="320000" GENRE="House" LABEL="Cometa Gris" COMMENT="Instrumental"
+            RANKING="255" PLAYCOUNT="11" PLAYTIME="360.5" IMPORT_DATE="2019/2/4"
+            LAST_PLAYED="2026/11/11" RELEASE_DATE="2018/6/1" FILESIZE="61500"
+            COLOR="1" REMIXER="Nube de tiza" KEY="Gm" RATING="Favorito"/>
+      <TEMPO BPM="123.50"/>
+      <MUSICAL_KEY VALUE="14"/>
+      <CUE_V2 NAME="Entrada" TYPE="0" START="8300" LEN="0" HOTCUE="1" COLOR="#1122AA"/>
+      <CUE_V2 NAME="Puente" TYPE="5" START="2080.5" LEN="1920.25" HOTCUE="3"/>
+      <CUE_V2 NAME="n.n." TYPE="5" START="6000" LEN="500" HOTCUE="-1"/>
+    </ENTRY>
+    <ENTRY TITLE="Jardín de ecos" ARTIST="Prisma">
+      <LOCATION VOLUME="Disco DJ" DIR="/:Sets/:" FILE="Jardín.flac"/>
+      <INFO COLOR="5"/>
+      <TEMPO BPM="115"/>
+      <MUSICAL_KEY VALUE="7"/>
+      <CUE_V2 NAME="AutoGrid" TYPE="0" START="42.500" LEN="0" HOTCUE="0"/>
+      <CUE_V2 NAME="Grilla inicial" TYPE="4" START="42.5" LEN="0" HOTCUE="-1">
+        <GRID BPM="116.25"/>
+      </CUE_V2>
+      <CUE_V2 NAME="Cambio" TYPE="4" START="80000" LEN="0" HOTCUE="-1">
+        <GRID BPM="118.75"/>
+      </CUE_V2>
+      <CUE_V2 NAME="n.n." TYPE="0" START="6200" LEN="0" HOTCUE="-1"/>
+      <CUE_V2 NAME="AutoGrid" TYPE="0" START="1800" LEN="0" HOTCUE="0"/>
+    </ENTRY>
+    <ENTRY TITLE="Vidrio al sol" ARTIST="Línea de sombra">
+      <LOCATION VOLUME="Disco DJ" DIR="/:Sets/:" FILE="Vidrio.flac"/>
+      <INFO COLOR="6" RANKING="112"/>
+      <TEMPO BPM="117"/>
+      <MUSICAL_KEY VALUE="20"/>
+      <CUE_V2 NAME="Fundido" TYPE="1" START="0" LEN="0" HOTCUE="-1"/>
+      <CUE_V2 NAME="Salida" TYPE="2" START="139000" LEN="0" HOTCUE="-1"/>
+      <CUE_V2 NAME="Cargar" TYPE="3" START="2000" LEN="0" HOTCUE="-1"/>
+    </ENTRY>
+    <ENTRY TITLE="Rada vacía" ARTIST="Prisma">
+      <LOCATION VOLUME="Macintosh HD" DIR="/:Music/:" FILE="Rada.aiff"/>
+      <INFO COLOR="7" KEY="Am" RATING="Favorito"/>
+      <TEMPO BPM="115.1"/>
+    </ENTRY>
+    <ENTRY TITLE="Puerta del sur" ARTIST="Faro de papel">
+      <LOCATION VOLUME="Macintosh HD" DIR="/:Music/:" FILE="Puerta.aiff"/>
+      <INFO KEY="G" RANKING="0"/>
+      <MUSICAL_KEY VALUE="99"/>
+    </ENTRY>
+    <ENTRY TITLE="Loop Recorder 004">
+      <LOCATION VOLUME="Macintosh HD" DIR="/:Traktor/:Recordings/:" FILE="Loop004.wav"/>
+      <LOOPINFO/>
+    </ENTRY>
+    <ENTRY TITLE="Factory Hat">
+      <LOCATION VOLUME="Macintosh HD" DIR="/:Traktor/:TraktorContent/:Samples/:" FILE="Hat.wav"/>
+    </ENTRY>
+  </COLLECTION>
+  <SETS/>
+  <PLAYLISTS>
+    <NODE TYPE="FOLDER" NAME="$ROOT">
+      <SUBNODES COUNT="3">
+        <NODE TYPE="FOLDER" NAME="Bolsos" UUID="fixture-20-bolsos">
+          <SUBNODES COUNT="1">
+            <NODE TYPE="FOLDER" NAME="2026">
+              <SUBNODES COUNT="1">
+                <NODE TYPE="PLAYLIST" NAME="Apertura">
+                  <PLAYLIST ENTRIES="3" UUID="fixture-20-apertura" TYPE="LIST">
+                    <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="Disco DJ/:Sets/:Jardín.flac"/></ENTRY>
+                    <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="Macintosh HD/:Music/:Bajo// Marea.aiff"/></ENTRY>
+                    <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="Disco DJ/:Sets/:Jardín.flac"/></ENTRY>
+                  </PLAYLIST>
+                </NODE>
+              </SUBNODES>
+            </NODE>
+          </SUBNODES>
+        </NODE>
+        <NODE TYPE="SMARTLIST" NAME="Energía">
+          <SMARTLIST UUID="fixture-20-energia">
+            <SEARCH_EXPRESSION VERSION="1" QUERY="BPM &gt; 116 &amp; RANKING &gt; 100"/>
+          </SMARTLIST>
+        </NODE>
+        <NODE TYPE="PLAYLIST" NAME="HISTORY"><PLAYLIST TYPE="PROTOCOL" ENTRIES="0"/></NODE>
+      </SUBNODES>
+    </NODE>
+  </PLAYLISTS>
+  <INDEXING/>
+</NML>

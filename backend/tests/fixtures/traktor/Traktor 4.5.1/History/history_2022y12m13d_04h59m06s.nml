@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<NML VERSION="20">
+  <COLLECTION ENTRIES="1">
+    <ENTRY TITLE="Marea (copia reciente)" ARTIST="Faro de papel">
+      <LOCATION VOLUME="Macintosh HD" DIR="/:Music/:" FILE="Bajo// Marea.aiff"/>
+      <TEMPO BPM="125"/>
+      <MUSICAL_KEY VALUE="15"/>
+    </ENTRY>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE TYPE="PLAYLIST" NAME="HISTORY">
+      <PLAYLIST ENTRIES="1" TYPE="PROTOCOL">
+        <ENTRY>
+          <PRIMARYKEY TYPE="TRACK" KEY="Macintosh HD/:Music/:Bajo// Marea.aiff"/>
+          <EXTENDEDDATA EXTENDEDTYPE="HistoryData" DECK="1" DURATION="180"
+                        PLAYEDPUBLIC="1" STARTDATE="132516877" STARTTIME="18000"/>
+        </ENTRY>
+      </PLAYLIST>
+    </NODE>
+  </PLAYLISTS>
+  <INDEXING/>
+</NML>

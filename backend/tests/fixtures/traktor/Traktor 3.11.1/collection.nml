@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<NML VERSION="19">
+  <HEAD COMPANY="Native Instruments" PROGRAM="Traktor"/>
+  <MUSICFOLDERS/>
+  <COLLECTION ENTRIES="6">
+    <ENTRY TITLE="Bajo de marea" ARTIST="Faro de papel">
+      <LOCATION VOLUME="Macintosh HD" VOLUMEID="boot" DIR="/:Music/:" FILE="Bajo// Marea.aiff"/>
+      <ALBUM TITLE="Costa de papel" TRACK="2"/>
+      <INFO BITRATE="1411200" GENRE="House" LABEL="Cometa Gris" COMMENT="Instrumental"
+            RANKING="153" PLAYCOUNT="7" PLAYTIME="360.5" IMPORT_DATE="2019/2/4"
+            LAST_PLAYED="2022/12/13" RELEASE_DATE="2018/6/1" FILESIZE="61500"
+            COLOR="1" REMIXER="Nube de tiza" KEY="Gm" RATING="Favorito"/>
+      <TEMPO BPM="123.50"/>
+      <MUSICAL_KEY VALUE="14"/>
+      <CUE_V2 NAME="n.n." TYPE="4" START="320.5" LEN="0" HOTCUE="0"/>
+      <CUE_V2 NAME="Entrada" TYPE="0" START="8300" LEN="0" HOTCUE="1" COLOR="#1122AA"/>
+      <CUE_V2 NAME="Puente" TYPE="5" START="2080.5" LEN="1920.25" HOTCUE="3"/>
+    </ENTRY>
+    <ENTRY TITLE="Taller nocturno" ARTIST="Tiza roja">
+      <LOCATION VOLUME="Disco DJ" DIR="/:Sets/:" FILE="Taller.flac"/>
+      <INFO KEY="Em" RATING="Cinco estrellas según el DJ"/>
+      <TEMPO BPM="112"/>
+      <CUE_V2 NAME="AutoGrid" TYPE="0" START="0" LEN="0" HOTCUE="0"/>
+    </ENTRY>
+    <ENTRY TITLE="Refracción" ARTIST="Prisma">
+      <LOCATION VOLUME="Disco DJ" DIR="/:Sets/:" FILE="Refracción.mp3"/>
+      <INFO COLOR="2"/>
+      <MUSICAL_KEY VALUE="8"/>
+      <CUE_V2 NAME="n.n." TYPE="0" START="2150" LEN="0" HOTCUE="-1"/>
+      <CUE_V2 NAME="Cargar" TYPE="3" START="0" LEN="0" HOTCUE="-1"/>
+    </ENTRY>
+    <ENTRY TITLE="Caliza" ARTIST="Línea de sombra">
+      <LOCATION VOLUME="Macintosh HD" DIR="/:Music/:" FILE="Caliza.aiff"/>
+      <INFO COLOR="3"/>
+    </ENTRY>
+    <ENTRY TITLE="Puerta del sur" ARTIST="Faro de papel">
+      <LOCATION VOLUME="Macintosh HD" DIR="/:Music/:" FILE="Puerta.aiff"/>
+      <INFO COLOR="4"/>
+    </ENTRY>
+    <ENTRY TITLE="Loop Recorder 001">
+      <LOCATION VOLUME="Macintosh HD" DIR="/:Traktor/:Recordings/:" FILE="Loop001.wav"/>
+      <LOOPINFO/>
+    </ENTRY>
+  </COLLECTION>
+  <SETS/>
+  <PLAYLISTS>
+    <NODE TYPE="FOLDER" NAME="$ROOT">
+      <SUBNODES COUNT="3">
+        <NODE TYPE="FOLDER" NAME="Bolsos">
+          <SUBNODES COUNT="1">
+            <NODE TYPE="FOLDER" NAME="2022">
+              <SUBNODES COUNT="1">
+                <NODE TYPE="PLAYLIST" NAME="Apertura">
+                  <PLAYLIST ENTRIES="2" UUID="fixture-19-apertura" TYPE="LIST">
+                    <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="Disco DJ/:Sets/:Taller.flac"/></ENTRY>
+                    <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="Macintosh HD/:Music/:Bajo// Marea.aiff"/></ENTRY>
+                  </PLAYLIST>
+                </NODE>
+              </SUBNODES>
+            </NODE>
+          </SUBNODES>
+        </NODE>
+        <NODE TYPE="SMARTLIST" NAME="House">
+          <SMARTLIST UUID="fixture-19-house">
+            <SEARCH_EXPRESSION VERSION="1" QUERY="GENRE = &quot;House&quot;"/>
+          </SMARTLIST>
+        </NODE>
+        <NODE TYPE="PLAYLIST" NAME="HISTORY"><PLAYLIST TYPE="PROTOCOL" ENTRIES="0"/></NODE>
+      </SUBNODES>
+    </NODE>
+  </PLAYLISTS>
+</NML>
