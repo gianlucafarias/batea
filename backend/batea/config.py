@@ -13,6 +13,7 @@ DB_PATH = APP_DIR / "batea.db"
 CACHE_DIR = APP_DIR / "cache"
 ARTWORK_CACHE = CACHE_DIR / "artwork"
 RB_SNAPSHOT_DIR = APP_DIR / "rekordbox-snapshot"
+SOURCES_DIR = APP_DIR / "sources"           # copias de las librerías de otros programas (una carpeta por programa)
 EXPORT_DIR = HOME / "Music" / "Batea"
 
 # rekordbox 6/7 (solo lectura: siempre se trabaja sobre una copia)
@@ -28,5 +29,5 @@ else:
 
 
 def ensure_dirs() -> None:
-    for d in (APP_DIR, CACHE_DIR, ARTWORK_CACHE, RB_SNAPSHOT_DIR, EXPORT_DIR):
+    for d in (APP_DIR, CACHE_DIR, ARTWORK_CACHE, RB_SNAPSHOT_DIR, SOURCES_DIR, EXPORT_DIR):
         d.mkdir(parents=True, exist_ok=True)

@@ -311,7 +311,7 @@ def run(job: Job, paths: list[str] | None = None) -> dict:
                 known[p] = moved[0]
                 cache_rows.append((p, size, mtime, dur, "track", moved[0])); res["movidos"] += 1
                 continue
-            if same and (not explicit or any(m[3] == "rekordbox" for m in same)):
+            if same and (not explicit or any(m[3] != "local" for m in same)):  # ya es de un programa (rekordbox, Traktor…)
                 cache_rows.append((p, size, mtime, dur, "copy", same[0][0])); res["copias"] += 1
                 continue
             try:

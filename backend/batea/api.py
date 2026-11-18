@@ -14,8 +14,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import agents, analysis, anlz, config, db, discover, export, features, folders, jobs, keyfill, links, rbsync, recommend, runtime, universe, updates
+from .sources import registry
+from .sources.base import KINDS, LABELS
 from .api_helpers import (
-    VIRTUAL_CRATES, attach_tags, count_tracks, crate_track_ids, is_online, mark_online, query_tracks, real_path, reset_online_cache, TRACK_COLUMNS,
+    VIRTUAL_CRATES, attach_sources, attach_tags, count_tracks, crate_track_ids, is_online, mark_online, query_tracks, real_path, reset_online_cache, TRACK_COLUMNS,
 )
 
 app = FastAPI(title="Batea")
@@ -72,6 +74,7 @@ def status() -> dict:
             "local": local,
             "rekordbox_found": rbsync.rekordbox_available(),
             "rekordbox_dir": str(config.RB_DIR),
+            "sources": registry.detect_all(c),
             "last_sync": db.get_meta(c, "last_sync"),
             "welcome_done": db.get_meta(c, "welcome_done") == "1",
             "autodiscover": discover.auto_enabled(c),
@@ -81,7 +84,8 @@ def status() -> dict:
 
 
 class SetupIn(BaseModel):
-    rekordbox: bool = False
+    sources: list[str] = []       # kinds elegidos: ["rekordbox", "traktor", …]
+    rekordbox: bool = False       # formato viejo: equivale a sources=["rekordbox"]
     search: str = "none"          # none | all | folder
     path: str | None = None
 
@@ -91,8 +95,15 @@ def setup(body: SetupIn) -> dict:
     """Primera vez: hace SOLO lo que la persona eligió. Hasta que se llama acá no arranca ninguna importación ni búsqueda."""
     if body.search not in ("none", "all", "folder"):
         raise HTTPException(400, "Opción de búsqueda desconocida")
-    if body.rekordbox and not rbsync.rekordbox_available():
-        raise HTTPException(404, "No encontré la base de rekordbox")
+    wanted = [k for k in KINDS if k in body.sources or (k == "rekordbox" and body.rekordbox)]
+    unknown = [k for k in body.sources if k not in KINDS]
+    if unknown:
+        raise HTTPException(400, f"No conozco esa fuente: {unknown[0]}")
+    with db.conn() as c:
+        found = {s["kind"]: s for s in registry.detect_all(c)}
+    for k in wanted:
+        if not found.get(k, {}).get("found"):
+            raise HTTPException(404, "No encontré la base de rekordbox" if k == "rekordbox" else f"No encontré la librería de {LABELS[k]}")
     folder = None
     if body.search == "folder":
         folder = Path(body.path).expanduser() if body.path else None
@@ -101,12 +112,109 @@ def setup(body: SetupIn) -> dict:
     out: dict = {}
     # la búsqueda automática (al abrir y al conectar un disco) queda activada solo si lo eligió; después espera la importación
     discover.set_auto(body.search == "all")
-    if body.rekordbox:
-        reset_online_cache()
-        out["sync"] = jobs.start("sync", "Sincronizando con rekordbox", rbsync.sync).__dict__
+    with db.conn() as c:
+        registry.set_enabled(c, wanted)
+    out["jobs"] = [j.__dict__ for j in _start_syncs(wanted)]
+    rb = next((j for j in out["jobs"] if j["kind"] == "sync"), None)
+    if rb:
+        out["sync"] = rb
     if folder is not None:
         out["discover"] = discover.start([str(folder)]).__dict__
     return out
+
+
+def _start_syncs(kinds: list[str]) -> list:
+    """Sincroniza las fuentes en orden (rekordbox primero), una a la vez."""
+    if not kinds:
+        return []
+    reset_online_cache()
+    return jobs.start_chain([(registry.job_kind(k), registry.job_label(k), lambda j, k=k: registry.sync(k, j)) for k in kinds])
+
+
+# ---------------------------------------------------------------- fuentes (rekordbox, Traktor, Serato…)
+def _check_kind(kind: str) -> None:
+    if kind not in KINDS:
+        raise HTTPException(404, "No conozco esa fuente")
+
+
+@app.get("/api/sources")
+def list_sources() -> dict:
+    return {"sources": registry.detect_all()}
+
+
+@app.post("/api/sources/sync-all")
+def sync_all_sources() -> dict:
+    with db.conn() as c:
+        kinds = [s["kind"] for s in registry.detect_all(c) if s["found"] and s["enabled"]]
+    return {"jobs": [j.__dict__ for j in _start_syncs(kinds)]}
+
+
+@app.post("/api/sources/{kind}/sync")
+def sync_source(kind: str) -> dict:
+    _check_kind(kind)
+    with db.conn() as c:
+        src = registry.detect_one(c, kind)
+        if not src["found"]:
+            raise HTTPException(404, "No encontré la base de rekordbox" if kind == "rekordbox" else f"No encontré la librería de {LABELS[kind]}")
+        if not src["enabled"]:       # pedir una sincronización es activar la fuente
+            registry.set_enabled(c, [*registry.enabled_kinds(c), kind])
+    return _start_syncs([kind])[0].__dict__
+
+
+class EnabledIn(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/sources/{kind}/enabled")
+def set_source_enabled(kind: str, body: EnabledIn) -> dict:
+    """Activar/desactivar: solo decide si entra en "sincronizar todo". No borra ni oculta nada."""
+    _check_kind(kind)
+    with db.conn() as c:
+        cur = [k for k in registry.enabled_kinds(c) if k != kind]
+        registry.set_enabled(c, cur + [kind] if body.enabled else cur)
+    return {"ok": True, "kind": kind, "enabled": body.enabled}
+
+
+class LocationIn(BaseModel):
+    path: str = ""
+
+
+@app.post("/api/sources/{kind}/location")
+def set_source_location(kind: str, body: LocationIn) -> dict:
+    """Ruta manual de la librería (collection.nml o la carpeta que la contiene). Vacía = volver a buscarla sola."""
+    _check_kind(kind)
+    if kind not in registry.ADAPTERS or kind == "rekordbox":
+        raise HTTPException(400, "Esa fuente no admite cambiar la ruta todavía")
+    path = body.path.strip()
+    if path and not Path(path).expanduser().exists():
+        raise HTTPException(400, "No encontré esa ruta")
+    with db.conn() as c:
+        db.set_meta(c, f"source_path:{kind}", str(Path(path).expanduser()) if path else "")
+        registry.forget()
+        return registry.detect_one(c, kind)
+
+
+@app.get("/api/tracks/{tid}/sources")
+def track_sources(tid: int) -> dict:
+    """Qué dice cada programa de este tema (BPM, tono, rating…), para comparar."""
+    with db.conn() as c:
+        rows = [dict(r) for r in c.execute("SELECT * FROM track_sources WHERE track_id=?", (tid,))]
+        rb = c.execute("SELECT 1 FROM tracks WHERE id=? AND rb_id IS NOT NULL", (tid,)).fetchone()
+    order = {k: i for i, k in enumerate(KINDS)}
+    out = []
+    for r in sorted(rows, key=lambda r: order.get(r["source"], len(order))):
+        cues = json.loads(r["cues_json"]) if r["cues_json"] else None
+        out.append({
+            "source": r["source"], "label": LABELS.get(r["source"], r["source"]), "bpm": r["bpm"],
+            "key_camelot": r["key_camelot"], "key_raw": r["key_raw"], "rating": r["rating"],
+            "play_count": r["play_count"], "cues_count": len(cues) if cues is not None else None,
+            "date_added": r["date_added"], "last_played": r["last_played"], "synced_at": r["synced_at"],
+        })
+    if rb and not any(o["source"] == "rekordbox" for o in out):   # sincronizado antes de track_sources
+        out.insert(0, {"source": "rekordbox", "label": LABELS["rekordbox"], "bpm": None, "key_camelot": None, "key_raw": None,
+                       "rating": None, "play_count": None, "cues_count": None, "date_added": None, "last_played": None,
+                       "synced_at": None})
+    return {"sources": out}
 
 
 class AutoIn(BaseModel):
@@ -142,7 +250,7 @@ def sync_rekordbox() -> dict:
     if not rbsync.rekordbox_available():
         raise HTTPException(404, "No encontré la base de rekordbox")
     reset_online_cache()
-    return jobs.start("sync", "Sincronizando con rekordbox", rbsync.sync).__dict__
+    return _start_syncs(["rekordbox"])[0].__dict__
 
 
 class AnalyzeFolder(BaseModel):
@@ -225,7 +333,7 @@ def folder_tree() -> list[dict]:
 def crates() -> dict:
     with db.conn() as c:
         rows = [dict(r) for r in c.execute(
-            """SELECT c.id, c.name, c.kind, c.parent_id, c.hidden, c.date, c.query, c.position,
+            """SELECT c.id, c.name, c.kind, c.parent_id, c.hidden, c.date, c.query, c.position, COALESCE(c.source, 'user') AS source,
                       (SELECT COUNT(*) FROM crate_tracks ct WHERE ct.crate_id=c.id) AS count
                FROM crates c ORDER BY c.position, c.name"""
         )]
@@ -284,7 +392,7 @@ def create_crate(body: CrateIn) -> dict:
     with db.conn() as c:
         kind = "smart" if body.query is not None else "user"
         cur = c.execute(
-            "INSERT INTO crates(name, kind, parent_id, query, position) VALUES (?,?,?,?, (SELECT COALESCE(MAX(position),0)+1 FROM crates))",
+            "INSERT INTO crates(name, kind, parent_id, query, position, source) VALUES (?,?,?,?, (SELECT COALESCE(MAX(position),0)+1 FROM crates), 'user')",
             (body.name, kind, body.parent_id, json.dumps(body.query) if body.query is not None else None),
         )
         cid = cur.lastrowid
@@ -373,12 +481,13 @@ def remove_from_crate(cid: int, tid: int) -> dict:
 
 
 # ---------------------------------------------------------------- temas
-def _filters(q, tags, not_tags, bpm_min, bpm_max, energy_min, energy_max, keys_, key_compat, rating_min, source, added_after):
+def _filters(q, tags, not_tags, bpm_min, bpm_max, energy_min, energy_max, keys_, key_compat, rating_min, source, added_after, in_source=None):
     split = lambda s: [x for x in (s or "").split(",") if x]  # noqa: E731
     return {
         "q": q, "tags": split(tags), "not_tags": split(not_tags), "bpm_min": bpm_min, "bpm_max": bpm_max,
         "energy_min": energy_min, "energy_max": energy_max, "keys": split(keys_), "key_compat": key_compat,
         "rating_min": rating_min, "source": source, "added_after": added_after,
+        "in_source": in_source,
     }
 
 
@@ -388,9 +497,9 @@ def tracks(
     bpm_min: float | None = None, bpm_max: float | None = None, energy_min: int | None = None,
     energy_max: int | None = None, keys: str | None = Query(None), key_compat: str | None = None,
     rating_min: int | None = None, source: str | None = None, added_after: str | None = None,
-    limit: int | None = None,
+    in_source: str | None = None, limit: int | None = None,
 ) -> list[dict]:
-    f = _filters(q, tags, not_tags, bpm_min, bpm_max, energy_min, energy_max, keys, key_compat, rating_min, source, added_after)
+    f = _filters(q, tags, not_tags, bpm_min, bpm_max, energy_min, energy_max, keys, key_compat, rating_min, source, added_after, in_source)
     with db.conn() as c:
         return query_tracks(c, crate, f, limit)
 
@@ -401,6 +510,7 @@ def _track_detail(c, tid: int) -> dict:
         raise HTTPException(404, "No existe")
     d = dict(r)
     attach_tags(c, [d])
+    attach_sources(c, [d])
     d["online"] = real_path(c, tid) is not None
     d["tag_sources"] = {row["tag_id"]: row["source"] for row in c.execute("SELECT tag_id, source FROM track_tags WHERE track_id=?", (tid,))}
     d["crates"] = [dict(x) for x in c.execute(
@@ -494,7 +604,7 @@ def patch_track(tid: int, body: TrackPatch) -> dict:
         if body.meta:
             src = c.execute("SELECT source FROM tracks WHERE id=?", (tid,)).fetchone()
             if not src or src[0] != "local":
-                raise HTTPException(400, "Los datos de los temas de rekordbox se editan en rekordbox")
+                raise HTTPException(400, "Los datos de los temas de un programa se editan en ese programa")
             vals: dict[str, Any] = {}
             for k in META_FIELDS:
                 if k in body.meta:
@@ -637,6 +747,7 @@ def recs(tid: int, crate: str | None = None, limit: int = 30) -> dict:
             q = ",".join("?" * len(ids))
             rows = {r["id"]: dict(r) for r in c.execute(f"SELECT {TRACK_COLUMNS} FROM tracks t WHERE t.id IN ({q})", ids)}
             attach_tags(c, list(rows.values()))
+            attach_sources(c, list(rows.values()))
             mark_online(c, list(rows.values()))
             for item in res["items"]:
                 item["track"] = rows[item["id"]]
@@ -766,7 +877,7 @@ def create_relation(body: RelationIn) -> dict:
 @app.delete("/api/relations/{rid}")
 def delete_relation(rid: int) -> dict:
     with db.conn() as c:
-        c.execute("DELETE FROM relations WHERE id=? AND source!='history'", (rid,))
+        c.execute("DELETE FROM relations WHERE id=? AND source NOT LIKE 'history%'", (rid,))
     return {"ok": True}
 
 

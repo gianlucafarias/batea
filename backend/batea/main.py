@@ -38,6 +38,13 @@ class JsApi:
         res = self.window.create_file_dialog(webview.FileDialog.FOLDER)
         return res[0] if res else None
 
+    def pick_file(self) -> str | None:
+        """Elegir un archivo (collection.nml, master.sqlite…): mismo formato que pick_folder."""
+        import webview
+
+        res = self.window.create_file_dialog(webview.FileDialog.OPEN, allow_multiple=False)
+        return res[0] if res else None
+
 
 def on_drop(e: dict) -> list[str]:
     """Archivos o carpetas soltados sobre la ventana: Batea los trae (aunque estén en una carpeta ignorada)."""

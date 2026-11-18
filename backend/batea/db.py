@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS tracks (
     year INTEGER, bitrate INTEGER, filetype TEXT,
     artwork TEXT, anlz_dir TEXT,
     date_added TEXT, play_count INTEGER DEFAULT 0, last_played TEXT,
-    source TEXT NOT NULL DEFAULT 'rekordbox',      -- rekordbox | local
+    source TEXT NOT NULL DEFAULT 'rekordbox',      -- rekordbox | traktor | serato… | local (= no está en ningún programa)
     -- análisis (rekordbox ANLZ o audio propio)
     energy_raw REAL, energy_auto INTEGER,
     intro_bars INTEGER, outro_bars INTEGER, breaks INTEGER,
@@ -102,6 +102,19 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT
 );
 
+-- Un registro por programa de origen (rekordbox, traktor, serato…): no se pisa un BPM con otro
+CREATE TABLE IF NOT EXISTS track_sources (
+    track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    source TEXT NOT NULL,
+    ext_id TEXT, path_raw TEXT,
+    bpm REAL, key_raw TEXT, key_camelot TEXT,
+    rating REAL, color TEXT, play_count INTEGER,
+    date_added TEXT, last_played TEXT, comment TEXT,
+    cues_json TEXT, grid_json TEXT, synced_at TEXT,
+    PRIMARY KEY (track_id, source)
+);
+CREATE INDEX IF NOT EXISTS idx_track_sources_ext ON track_sources(source, ext_id);
+
 -- Universos: subconjuntos de trabajo (ej. "Techno") definidos por cajas/carpetas
 CREATE TABLE IF NOT EXISTS universes (
     id INTEGER PRIMARY KEY,
@@ -117,6 +130,7 @@ MIGRATIONS = [
     ("tracks", "key_source", "TEXT"),      # rekordbox | batea | tag
     ("tags", "hotkey", "TEXT"),
     ("tracks", "meta_user", "INTEGER"),    # 1 = título/artista/etc. editados a mano: el análisis no los pisa
+    ("crates", "source", "TEXT"),          # user | rekordbox | traktor | serato…
 ]
 
 DEFAULT_HOTKEYS = {
@@ -198,6 +212,11 @@ def backup(keep: int = 10, min_hours: float = 12) -> None:
         old.unlink(missing_ok=True)
 
 
+def canon_path(p: str | None) -> str | None:
+    """Ruta canónica para comparar archivos entre programas: NFC (macOS guarda NFD) y sin mayúsculas."""
+    return unicodedata.normalize("NFC", p).casefold() if p else None
+
+
 def free_hotkey(c: sqlite3.Connection, name: str) -> str | None:
     """Primera letra libre del nombre (sin acentos), para etiquetas nuevas."""
     used = {r[0] for r in c.execute("SELECT hotkey FROM tags WHERE hotkey IS NOT NULL")}
@@ -221,6 +240,9 @@ def init() -> None:
             if col not in cols:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
         c.execute("UPDATE tracks SET key_source='rekordbox' WHERE key IS NOT NULL AND key_source IS NULL AND source='rekordbox'")
+        # cajas de programas: rekordbox usa pl:/h:, el resto <programa>:…; lo demás son cajas propias
+        c.execute("UPDATE crates SET source='rekordbox' WHERE source IS NULL AND (rb_id LIKE 'pl:%' OR rb_id LIKE 'h:%')")
+        c.execute("UPDATE crates SET source='user' WHERE source IS NULL")
         n = c.execute("SELECT COUNT(*) FROM tags WHERE source='user'").fetchone()[0]
         if n == 0:
             pos = 0

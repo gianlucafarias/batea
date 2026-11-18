@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from . import anlz, config, db, features, keys, titles, universe
+from .sources import importer
 from .jobs import Job
 
 COLOR_NAMES = {"1": "pink", "2": "red", "3": "orange", "4": "yellow", "5": "green", "6": "aqua", "7": "blue", "8": "purple"}
@@ -83,8 +84,11 @@ def sync(job: Job) -> dict:
     stats = Counter()
     with db.conn() as c:
         existing = {r["rb_id"]: r["id"] for r in c.execute("SELECT id, rb_id FROM tracks WHERE rb_id IS NOT NULL")}
-        batea_keys = {r["id"] for r in c.execute("SELECT id FROM tracks WHERE key_source='batea' AND key IS NOT NULL")}
-        by_path = {r["path"]: r["id"] for r in c.execute("SELECT id, path FROM tracks WHERE rb_id IS NULL AND path IS NOT NULL")}
+        # tonos que no vienen de rekordbox (calculados por Batea o traídos de otro programa): se conservan si rekordbox no tiene
+        batea_keys = {r["id"] for r in c.execute(
+            "SELECT id FROM tracks WHERE key IS NOT NULL AND key_source IN ('batea','traktor','serato','engine','vdj')")}
+        # por ruta canónica: un tema que ya trajo otro programa (Traktor…) se reconoce aunque la ruta difiera en acentos/mayúsculas
+        by_path = {db.canon_path(r["path"]): r["id"] for r in c.execute("SELECT id, path FROM tracks WHERE rb_id IS NULL AND path IS NOT NULL")}
         rb_to_id: dict[str, int] = {}
 
         for i, t in enumerate(contents):
@@ -117,7 +121,7 @@ def sync(job: Job) -> dict:
             )
             row["key_source"] = "rekordbox" if row["key"] else None
             cols = list(row.keys())
-            tid = existing.get(rid) or by_path.get(row["path"] or "")
+            tid = existing.get(rid) or by_path.get(db.canon_path(row["path"]) or "")
             if tid and not row["key"] and tid in batea_keys:
                 # rekordbox no tiene tono para este tema: se conserva el que calculó Batea
                 cols = [k for k in cols if k not in ("key", "key_source")]
@@ -140,7 +144,10 @@ def sync(job: Job) -> dict:
 
         gone = set(existing) - set(rb_to_id)
         if gone:
-            c.executemany("UPDATE tracks SET rb_id=NULL, source='local' WHERE rb_id=?", [(g,) for g in gone])
+            gone_ids = [existing[g] for g in gone]
+            c.executemany("UPDATE tracks SET rb_id=NULL WHERE rb_id=?", [(g,) for g in gone])
+            # sigue en otro programa (Traktor…) o pasa a ser música suelta
+            importer.drop_source(c, "rekordbox", gone_ids)
             stats["fuera de rekordbox"] = len(gone)
 
         # ---- My Tags ------------------------------------------------------
@@ -215,9 +222,10 @@ def sync(job: Job) -> dict:
         c.executemany("UPDATE tracks SET last_played=? WHERE id=?", [(d, t) for t, d in last_played.items()])
         stats["sesiones"] = len(sessions)
         stats["transiciones del historial"] = len(pairs)
+        _fill_track_sources(c)
 
         # cajas de rekordbox que ya no existen
-        rb_crates = [r["rb_id"] for r in c.execute("SELECT rb_id FROM crates WHERE rb_id IS NOT NULL")]
+        rb_crates = [r["rb_id"] for r in c.execute("SELECT rb_id FROM crates WHERE rb_id LIKE 'pl:%' OR rb_id LIKE 'h:%'")]
         c.executemany("DELETE FROM crates WHERE rb_id=?", [(k,) for k in rb_crates if k not in seen])
         universe.prune(c)
         c.commit()
@@ -230,6 +238,22 @@ def sync(job: Job) -> dict:
 
     rb.close()
     return dict(stats)
+
+
+def _fill_track_sources(c: sqlite3.Connection) -> None:
+    """Un registro 'rekordbox' en track_sources por cada tema con rb_id (los cues quedan para más adelante)."""
+    c.execute(
+        "INSERT INTO track_sources(track_id, source, ext_id, path_raw, bpm, key_raw, key_camelot, rating, color, "
+        "play_count, date_added, last_played, comment, synced_at) "
+        "SELECT id, 'rekordbox', rb_id, path, bpm, key_raw, key, rb_rating, rb_color, play_count, date_added, "
+        "last_played, rb_comment, ? FROM tracks WHERE rb_id IS NOT NULL "
+        "ON CONFLICT(track_id, source) DO UPDATE SET ext_id=excluded.ext_id, path_raw=excluded.path_raw, "
+        "bpm=excluded.bpm, key_raw=excluded.key_raw, key_camelot=excluded.key_camelot, rating=excluded.rating, "
+        "color=excluded.color, play_count=excluded.play_count, date_added=excluded.date_added, "
+        "last_played=excluded.last_played, comment=excluded.comment, synced_at=excluded.synced_at",
+        (datetime.now().isoformat(timespec="seconds"),),
+    )
+    c.execute("DELETE FROM track_sources WHERE source='rekordbox' AND track_id IN (SELECT id FROM tracks WHERE rb_id IS NULL)")
 
 
 def _import_tree(c: sqlite3.Connection, nodes: list, prefix: str, kinds: dict[int, str], seen: set[str]) -> None:
@@ -248,9 +272,9 @@ def _import_tree(c: sqlite3.Connection, nodes: list, prefix: str, kinds: dict[in
         if parent is not None and parent is not n:
             parent_db = ensure(parent)
         c.execute(
-            "INSERT INTO crates(name, kind, parent_id, rb_id, position) VALUES (?,?,?,?,?) "
+            "INSERT INTO crates(name, kind, parent_id, rb_id, position, source) VALUES (?,?,?,?,?, 'rekordbox') "
             "ON CONFLICT(rb_id) DO UPDATE SET name=excluded.name, kind=excluded.kind, "
-            "parent_id=excluded.parent_id, position=excluded.position",
+            "parent_id=excluded.parent_id, position=excluded.position, source='rekordbox'",
             (n.Name or "Sin nombre", kind, parent_db, rid, int(getattr(n, "Seq", 0) or 0)),
         )
         cid = c.execute("SELECT id FROM crates WHERE rb_id=?", (rid,)).fetchone()[0]

@@ -10,6 +10,7 @@ from functools import lru_cache
 from typing import Any
 
 from . import keys, universe
+from .sources.base import KINDS
 
 VIRTUAL_CRATES = {
     "all": "Toda la colección",
@@ -27,7 +28,7 @@ TRACK_COLUMNS = f"""
     t.id, t.title, t.artist, t.album, t.label, t.genre, t.remixer, t.bpm, t.key, t.duration,
     {EFFECTIVE_RATING} AS rating, {EFFECTIVE_ENERGY} AS energy, t.energy AS energy_user, t.energy_auto,
     t.intro_bars, t.outro_bars, t.breaks, t.date_added, t.play_count, t.last_played, t.source,
-    t.rb_color AS color, t.path, (t.artwork IS NOT NULL) AS has_art, t.year, t.filetype, t.bitrate, t.hidden,
+    t.rb_color AS color, (t.rb_id IS NOT NULL) AS in_rb, t.path, (t.artwork IS NOT NULL) AS has_art, t.year, t.filetype, t.bitrate, t.hidden,
     (t.key_source = 'batea') AS key_est, (t.reviewed IS NOT NULL) AS reviewed,
     CASE WHEN t.source='local' AND t.analyzed IS NULL THEN 'pending'
          WHEN t.source='local' AND t.analyzed='error' THEN 'error'
@@ -76,6 +77,13 @@ def build_where(f: dict[str, Any], params: list) -> list[str]:
         w.append(f"{EFFECTIVE_RATING} >= ?"); params.append(int(f["rating_min"]))
     if f.get("source"):
         w.append("t.source = ?"); params.append(f["source"])
+    ins = f.get("in_source")
+    if ins == "none":
+        # no está en ningún programa
+        w.append("(t.rb_id IS NULL AND NOT EXISTS (SELECT 1 FROM track_sources s WHERE s.track_id=t.id))")
+    elif ins:
+        w.append("(EXISTS (SELECT 1 FROM track_sources s WHERE s.track_id=t.id AND s.source=?)" + (" OR t.rb_id IS NOT NULL)" if ins == "rekordbox" else ")"))
+        params.append(str(ins))
     if f.get("added_after"):
         w.append("t.date_added >= ?"); params.append(f["added_after"])
     return w
@@ -180,9 +188,30 @@ def query_tracks(c: sqlite3.Connection, crate: str | None, filters: dict, limit:
         sql += f" LIMIT {int(limit)}"
     rows = [dict(r) for r in c.execute(sql, params)]
     attach_tags(c, rows)
+    attach_sources(c, rows)
     mark_online(c, rows)
     return rows
 
+
+def attach_sources(c: sqlite3.Connection, rows: list[dict]) -> None:
+    """`sources`: en qué programas está cada tema (RB, TK…), en orden de precedencia. Una sola consulta para todos."""
+    if not rows:
+        return
+    by_id = {r["id"]: r for r in rows}
+    if len(rows) > 900:
+        found = c.execute("SELECT track_id, source FROM track_sources")
+    else:
+        q = ",".join("?" * len(rows))
+        found = c.execute(f"SELECT track_id, source FROM track_sources WHERE track_id IN ({q})", list(by_id))
+    sets: dict[int, set[str]] = {}
+    for tid, src in found:
+        sets.setdefault(tid, set()).add(src)
+    order = {k: i for i, k in enumerate(KINDS)}
+    for r in rows:
+        s = sets.get(r["id"], set())
+        if r.pop("in_rb", 0):      # rekordbox sincronizado antes de que existiera track_sources
+            s = s | {"rekordbox"}
+        r["sources"] = sorted(s, key=lambda k: order.get(k, len(order)))
 
 def attach_tags(c: sqlite3.Connection, rows: list[dict]) -> None:
     if not rows:

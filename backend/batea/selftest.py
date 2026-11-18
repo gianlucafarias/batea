@@ -201,5 +201,71 @@ def run() -> int:
 
     check("sin rekordbox: traer una carpeta a mano", local_import)
 
+    def sources_empty() -> str:
+        """Sin rekordbox ni Traktor en esta Mac: la detección no explota y todo figura como no encontrado."""
+        from . import db
+        from .sources import registry
+
+        db.init()
+        old = os.environ.get("BATEA_TRAKTOR_DIR")
+        os.environ["BATEA_TRAKTOR_DIR"] = str(tmp / "sin-traktor")      # nunca la carpeta real
+        try:
+            registry.forget()
+            found = {s["kind"]: s for s in registry.detect_all()}
+        finally:
+            registry.forget()
+            if old is None:
+                os.environ.pop("BATEA_TRAKTOR_DIR", None)
+            else:
+                os.environ["BATEA_TRAKTOR_DIR"] = old
+        assert {"rekordbox", "traktor", "serato"} <= set(found), list(found)
+        assert not any(s["found"] for s in found.values()), found
+        return "rekordbox, Traktor y Serato: no encontrados, sin errores"
+
+    check("fuentes: detección sin programas", sources_empty)
+
+    def import_synthetic() -> str:
+        """Importar un volcado sintético de Traktor en una base temporal: temas, caja, sesión, transición y resync."""
+        import sqlite3
+
+        from . import db
+        from .jobs import Job
+        from .sources import importer
+        from .sources.base import Cue, SourceDump, SrcCrate, SrcPlay, SrcSession, SrcTrack
+
+        c = sqlite3.connect(":memory:")
+        c.row_factory = sqlite3.Row
+        c.execute("PRAGMA foreign_keys = ON")
+        c.executescript(db.SCHEMA)
+        for table, col, decl in db.MIGRATIONS:
+            c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}") if col not in {r["name"] for r in c.execute(f"PRAGMA table_info({table})")} else None
+        c.execute("INSERT INTO tracks(rb_id, path, title, bpm, key, source) VALUES ('1', '/m/Uno.mp3', 'Uno', 130, '8A', 'rekordbox')")
+
+        def dump(full: bool) -> SourceDump:
+            tracks = [SrcTrack("a", "/M/UNO.mp3", title="Uno TK", bpm=128, key_camelot="9A", cues=[Cue("hot", 1000)]),
+                      SrcTrack("b", "/m/dos.mp3", title="Dos", bpm=140, key_camelot="1A")]
+            if not full:
+                return SourceDump("traktor", tracks=tracks[:1])
+            return SourceDump(
+                "traktor", tracks=tracks, crates=[SrcCrate("p", "Lista", "playlist", track_ext_ids=["b", "a"])],
+                sessions=[SrcSession("s", "Noche", "2026-05-01T22:00:00", [SrcPlay("a", 1), SrcPlay("b", 2), SrcPlay(None, 3)])])
+
+        st = importer.import_dump(c, dump(True), Job("t", "t", "t"))
+        q = lambda sql: [tuple(r) for r in c.execute(sql)]  # noqa: E731
+        assert q("SELECT bpm, source FROM tracks WHERE rb_id='1'") == [(130.0, "rekordbox")], "pisó el BPM de rekordbox"
+        assert q("SELECT COUNT(*) FROM tracks") == [(2,)] and st["nuevos"] == 1 and st["reproducciones sin tema"] == 1, st
+        assert q("SELECT COUNT(*) FROM track_sources WHERE source='traktor'") == [(2,)]
+        assert q("SELECT ct.position FROM crate_tracks ct JOIN crates c ON c.id=ct.crate_id WHERE c.rb_id='traktor:p' ORDER BY ct.position") == [(0,), (1,)]
+        assert q("SELECT source, kind FROM relations") == [("history:traktor", "history")]
+        assert q("SELECT COUNT(*) FROM crates WHERE kind='session' AND source='traktor'") == [(1,)]
+        importer.import_dump(c, dump(False), Job("t", "t", "t"))
+        assert q("SELECT COUNT(*) FROM track_sources WHERE source='traktor'") == [(1,)], "no borró lo que ya no viene"
+        assert q("SELECT COUNT(*) FROM crates") == [(0,)] and q("SELECT COUNT(*) FROM relations") == [(0,)]
+        assert q("SELECT source FROM tracks WHERE title='Dos'") == [("local",)]
+        c.close()
+        return "temas, caja, sesión, transición history:traktor y resync"
+
+    check("fuentes: importar un volcado sintético", import_synthetic)
+
     print("\nRESULTADO:", "todo bien" if not fails else f"fallaron {len(fails)}: {', '.join(fails)}")
     return 0 if not fails else 1

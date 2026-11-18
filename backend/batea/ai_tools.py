@@ -573,7 +573,7 @@ def crear_caja(nombre: str, ids: list[int]) -> str:
             pass
     else:
         with db.conn() as c:
-            cur = c.execute("INSERT INTO crates(name, kind, position) VALUES (?, 'user', (SELECT COALESCE(MAX(position),0)+1 FROM crates))",
+            cur = c.execute("INSERT INTO crates(name, kind, position, source) VALUES (?, 'user', (SELECT COALESCE(MAX(position),0)+1 FROM crates), 'user')",
                             (nombre,))
             cid = cur.lastrowid
             universe.add_crate_to_active(c, cid)

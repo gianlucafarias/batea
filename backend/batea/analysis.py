@@ -251,8 +251,8 @@ def run_folder(job: Job, folder: str, reanalyze: bool = False) -> dict:
     files = scan_folder(folder)
     with db.conn() as c:
         known = {r["path"]: (r["id"], r["analyzed"], r["source"]) for r in c.execute("SELECT id, path, analyzed, source FROM tracks WHERE path IS NOT NULL")}
-    in_rb = sum(1 for p in files if p in known and known[p][2] == "rekordbox")
-    todo = [p for p in files if not (p in known and known[p][2] == "rekordbox")
+    in_rb = sum(1 for p in files if p in known and known[p][2] != "local")      # de rekordbox, Traktor…: lo analiza su programa
+    todo = [p for p in files if not (p in known and known[p][2] != "local")
             and (reanalyze or p not in known or known[p][1] is None)]
     job.update(0.03, f"{len(todo)} temas para analizar ({in_rb} ya están en rekordbox)")
     res = run_paths(job, todo) if todo else {"analizados": 0}

@@ -72,3 +72,45 @@ def list_jobs() -> list[dict]:
         for k in [k for k, j in _jobs.items() if j.finished and now - j.finished > 600]:
             del _jobs[k]
         return [asdict(j) for j in sorted(_jobs.values(), key=lambda j: -j.started)]
+
+
+def start_chain(items: list[tuple[str, str, Callable[[Job], dict | None]]]) -> list[Job]:
+    """Varias tareas una detrás de otra en un solo hilo (p. ej. sincronizar rekordbox y después Traktor).
+
+    Devuelve un Job por tarea, todos "running" desde el principio; los que esperan dicen "En espera".
+    Si ya había una corriendo del mismo tipo, se devuelve esa y no se duplica."""
+    pending: list[tuple[Job, Callable[[Job], dict | None]]] = []
+    out: list[Job] = []
+    with _lock:
+        for kind, label, fn in items:
+            dup = next((j for j in _jobs.values() if j.kind == kind and j.status == "running"), None)
+            if dup:
+                out.append(dup)
+                continue
+            job = Job(id=uuid.uuid4().hex[:10], kind=kind, label=label, message="En espera")
+            _jobs[job.id] = job
+            pending.append((job, fn))
+            out.append(job)
+
+    def run() -> None:
+        for job, fn in pending:
+            try:
+                if job.cancelled:
+                    job.message = "Cancelado"
+                    job.result = {"cancelado": True}
+                    job.status = "done"
+                    continue
+                job.message = ""
+                job.result = fn(job) or {}
+                job.status = "done"
+                job.progress = 1.0
+            except Exception as e:  # noqa: BLE001
+                traceback.print_exc()
+                job.status = "error"
+                job.message = f"{type(e).__name__}: {e}"
+            finally:
+                job.finished = time.time()
+
+    if pending:
+        threading.Thread(target=run, daemon=True, name="job-chain").start()
+    return out
