@@ -1,6 +1,6 @@
 import { artistCrate } from './Artist'
 import { useEffect, useRef, useState } from 'react'
-import { api } from '../api'
+import { api, isNotFound, type ExportResult, type ExportTarget, type ExportTargetId } from '../api'
 import { useApp, usePlayer } from '../store'
 import { cleanTitle, fmtTime } from '../util'
 import { Sleeve } from './bits'
@@ -10,21 +10,47 @@ import { useWaveform, Waveform } from './Waveform'
 import { GlyphSwap, HoverList } from '../lib/fluidHover'
 import { spring, usePresence } from '../lib/motion'
 
+const LAST_TARGET = 'batea.export.target'
+const FALLBACK_TARGET: ExportTarget = {
+  id: 'rekordbox', label: 'rekordbox', available: true, reason: null, format: 'XML',
+  carries: ['Playlists en orden', 'Rating, comentario y color', 'BPM y tono'],
+  loses: ['Cues y grillas de Batea'],
+  how_to_load: 'Preferencias → Avanzado → Base de datos → rekordbox xml → elegí el archivo; aparece en la barra lateral',
+}
+
+function lastTarget(): string | null {
+  try { return localStorage.getItem(LAST_TARGET) } catch { return null }
+}
+
 export function ExportDialog() {
   const { exportOpen, setExportOpen, crates, virtualCrates, folders, crateId, toast } = useApp()
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [tagsInComment, setTagsInComment] = useState(false)
-  const [res, setRes] = useState<{ path: string; tracks: number; playlists: number } | null>(null)
+  const [targets, setTargets] = useState<ExportTarget[]>([FALLBACK_TARGET])
+  const [target, setTarget] = useState<ExportTargetId>('rekordbox')
+  const [oldApi, setOldApi] = useState(false)
   const [busy, setBusy] = useState(false)
   const [shown, closing] = usePresence(exportOpen, spring.slow.exit)
 
   useEffect(() => {
     if (!exportOpen) return
-    setRes(null)
     const mine = crates.filter((c) => c.kind === 'user' || c.kind === 'smart').map((c) => String(c.id))
     // "Toda la colección" y "Eliminados" no figuran en la lista: preseleccionarlas exportaba algo que no se veía marcado
     setSel(new Set(crateId && crateId !== 'all' && crateId !== 'hidden' ? [crateId] : mine))
-  }, [exportOpen, crateId, crates])
+    let alive = true
+    api.exportTargets().then(({ targets: list }) => {
+      if (!alive) return
+      setOldApi(false)
+      setTargets(list)
+      const last = lastTarget()
+      const pick = list.find((t) => t.id === last && t.available) ?? list.find((t) => t.available)
+      if (pick) setTarget(pick.id)
+    }).catch((e) => {
+      if (!alive) return
+      if (isNotFound(e)) { setOldApi(true); setTargets([FALLBACK_TARGET]); setTarget('rekordbox') } else toast((e as Error).message, 'error')
+    })
+    return () => { alive = false }
+  }, [exportOpen, crateId, crates, toast])
 
   if (!shown) return null
   const here = folderCrate(crateId, folders) ?? artistCrate(crateId)
@@ -34,62 +60,78 @@ export function ExportDialog() {
     { label: 'Atajos', list: virtualCrates.filter((c) => c.id !== 'all' && c.id !== 'hidden') },
     { label: 'Playlists de rekordbox', list: crates.filter((c) => c.kind === 'playlist' && !c.hidden && c.count) },
   ]
+  const cur = targets.find((t) => t.id === target) ?? targets[0]
+  const go = async () => {
+    setBusy(true)
+    try {
+      const ids = [...sel]
+      const res: ExportResult = oldApi
+        ? await api.exportRb(ids, tagsInComment).then((r) => ({ ok: true, target: 'rekordbox' as const, path: r.path, files: [r.path], tracks: r.tracks, missing: 0, warnings: [] }))
+        : await api.exportTo(cur.id, ids, tagsInComment)
+      try { localStorage.setItem(LAST_TARGET, cur.id) } catch { /* sin almacenamiento */ }
+      setExportOpen(false)
+      const missing = res.missing ? ` · ${res.missing} sin archivo ahora` : ''
+      toast(res.tracks ? `${cur.label}: ${res.tracks} ${res.tracks === 1 ? 'tema' : 'temas'}${missing} → ${res.path}` : (res.warnings[0] ?? 'No había temas para exportar'),
+        res.tracks ? 'ok' : 'error',
+        res.tracks ? { label: 'Mostrar en Finder', run: () => { api.revealExport(res.path).catch((e) => toast((e as Error).message, 'error')) } } : undefined)
+    } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
+  }
   return (
     <div className={`modal-bg${closing ? ' closing' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && setExportOpen(false)}>
       <div className="modal">
         <div>
-          <h2>Exportar a rekordbox</h2>
+          <h2>Exportar</h2>
           <p className="muted" style={{ margin: '6px 0 0', lineHeight: 1.5 }}>
-            Genera un XML con las cajas elegidas como playlists. rekordbox lo importa por su camino oficial, sin tocar tu base. De ahí exportás al USB como siempre para los CDJ.
+            Batea escribe un archivo aparte con las cajas elegidas. No toca la base de ningún programa.
           </p>
         </div>
-        {!res ? (
-          <>
+        {targets.length > 1 && (
+          <div>
+            <div className="eyebrow" style={{ padding: '0 0 4px' }}>¿A qué programa?</div>
             <HoverList className="check-list">
-              {groups.map((g) => g.list.length > 0 && (
-                <div key={g.label}>
-                  <div className="eyebrow" style={{ padding: '8px 8px 4px' }}>{g.label}</div>
-                  {g.list.map((c) => (
-                    <label key={c.id} data-fh>
-                      <input type="checkbox" checked={sel.has(String(c.id))} onChange={(e) => {
-                        const n = new Set(sel); e.target.checked ? n.add(String(c.id)) : n.delete(String(c.id)); setSel(n)
-                      }} />
-                      <span className="ellipsis">{c.name}</span><span className="count">{c.count}</span>
-                    </label>
-                  ))}
-                </div>
+              {targets.map((t) => (
+                <label key={t.id} className={t.available ? '' : 'off'} {...(t.available ? { 'data-fh': '' } : {})}>
+                  <input type="radio" name="export-target" checked={t.id === target} disabled={!t.available} onChange={() => setTarget(t.id)} />
+                  <span className="ellipsis">{t.label}</span>
+                  <span className="count">{t.available ? t.format : t.reason}</span>
+                </label>
               ))}
             </HoverList>
-            <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', lineHeight: 1.45 }}>
-              <input type="checkbox" checked={tagsInComment} onChange={(e) => setTagsInComment(e.target.checked)} style={{ marginTop: 2 }} />
-              <span>Agregar mis etiquetas al comentario (<span className="mono">#intro-larga #acapella…</span>)<br />
-                <span className="muted" style={{ fontSize: 12 }}>Sirve para verlas y buscarlas en el CDJ. Solo se aplica a temas que rekordbox importe desde el XML.</span></span>
-            </label>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button className="btn ghost" onClick={() => setExportOpen(false)}>Cancelar</button>
-              <button className="btn primary" disabled={!sel.size || busy} onClick={async () => {
-                setBusy(true)
-                try { setRes(await api.exportRb([...sel], tagsInComment)) } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
-              }}>{busy ? 'Exportando…' : `Exportar ${sel.size} ${sel.size === 1 ? 'caja' : 'cajas'}`}</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="card" style={{ background: 'var(--bg-2)' }}>
-              <div><b className="num">{res.playlists}</b> playlists · <b className="num">{res.tracks}</b> temas → <span className="mono" style={{ fontSize: 11.5 }}>{res.path}</span></div>
-            </div>
-            <ol className="steps">
-              <li>En rekordbox: <b>Preferencias → Avanzado → Base de datos → rekordbox xml</b>, elegí <code>{res.path}</code> (una sola vez).</li>
-              <li>Activá <b>Vista → Mostrar “rekordbox xml”</b> en la barra lateral si no aparece.</li>
-              <li>Abrí <b>rekordbox xml → Playlists → Batea · fecha</b>, click derecho en cada playlist → <b>Importar playlist</b>.</li>
-              <li>Los temas nuevos se analizan en rekordbox y después los exportás al USB para los CDJ.</li>
-            </ol>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button className="btn" onClick={() => api.revealExport()}>Mostrar en Finder</button>
-              <button className="btn primary" onClick={() => setExportOpen(false)}>Listo</button>
-            </div>
-          </>
+          </div>
         )}
+        <div className="export-detail">
+          <div><div className="eyebrow">Qué viaja</div><ul>{cur.carries.map((x) => <li key={x}>{x}</li>)}</ul></div>
+          <div><div className="eyebrow">Qué no viaja</div><ul>{cur.loses.map((x) => <li key={x}>{x}</li>)}</ul></div>
+          <div><div className="eyebrow">Cómo cargarlo</div><div style={{ color: 'var(--text-2)', marginTop: 4 }}>{cur.how_to_load}</div></div>
+        </div>
+        <HoverList className="check-list">
+          {groups.map((g) => g.list.length > 0 && (
+            <div key={g.label}>
+              <div className="eyebrow" style={{ padding: '8px 8px 4px' }}>{g.label}</div>
+              {g.list.map((c) => (
+                <label key={c.id} data-fh>
+                  <input type="checkbox" checked={sel.has(String(c.id))} onChange={(e) => {
+                    const n = new Set(sel); e.target.checked ? n.add(String(c.id)) : n.delete(String(c.id)); setSel(n)
+                  }} />
+                  <span className="ellipsis">{c.name}</span><span className="count">{c.count}</span>
+                </label>
+              ))}
+            </div>
+          ))}
+        </HoverList>
+        {cur.id === 'rekordbox' && (
+          <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', lineHeight: 1.45 }}>
+            <input type="checkbox" checked={tagsInComment} onChange={(e) => setTagsInComment(e.target.checked)} style={{ marginTop: 2 }} />
+            <span>Agregar mis etiquetas al comentario (<span className="mono">#intro-larga #acapella…</span>)<br />
+              <span className="muted" style={{ fontSize: 12 }}>Sirve para verlas y buscarlas en el CDJ. Solo se aplica a temas que rekordbox importe desde el XML.</span></span>
+          </label>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn ghost" onClick={() => setExportOpen(false)}>Cancelar</button>
+          <button className="btn primary" disabled={!sel.size || busy || !cur.available} onClick={go}>
+            {busy ? 'Exportando…' : `Exportar ${sel.size} ${sel.size === 1 ? 'caja' : 'cajas'}`}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -118,7 +160,16 @@ export function PromptModal() {
 
 export function Toasts() {
   const toasts = useApp((s) => s.toasts)
-  return <div className="toasts" role="status" aria-live="polite">{toasts.map((t) => <div key={t.id} className={`toast ${t.tone ?? ''}${t.leaving ? ' leaving' : ''}`}>{t.text}</div>)}</div>
+  return (
+    <div className="toasts" role="status" aria-live="polite">
+      {toasts.map((t) => (
+        <div key={t.id} className={`toast ${t.tone ?? ''}${t.action ? ' has-action' : ''}${t.leaving ? ' leaving' : ''}`}>
+          <span className="toast-path">{t.text}</span>
+          {t.action && <button onClick={t.action.run}>{t.action.label}</button>}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export function Player() {

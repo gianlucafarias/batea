@@ -5,7 +5,7 @@ import type { Crate, Filters, FolderNode, Job, Tag, Track, UniverseList } from '
 
 export type View = 'home' | 'crate' | 'map' | 'inbox' | 'tagger'
 
-interface Toast { id: number; text: string; tone?: 'ok' | 'error'; leaving?: boolean }
+interface Toast { id: number; text: string; tone?: 'ok' | 'error'; leaving?: boolean; action?: { label: string; run: () => void } }
 
 interface State {
   /** false hasta que el motor contestó por primera vez: mientras tanto se muestra la pantalla de arranque */
@@ -62,7 +62,7 @@ interface State {
   refreshSources: () => Promise<void>
   updateSource: (source: LibrarySource) => void
   bump: () => void
-  toast: (text: string, tone?: 'ok' | 'error') => void
+  toast: (text: string, tone?: 'ok' | 'error', action?: { label: string; run: () => void }) => void
   setExportOpen: (v: boolean) => void
   trackJob: (job: Job) => void
 }
@@ -206,12 +206,13 @@ export const useApp = create<State>((set, get) => ({
     })
   },
   bump: () => set((s) => ({ libraryVersion: s.libraryVersion + 1 })),
-  toast: (text, tone = 'ok') => {
+  toast: (text, tone = 'ok', action) => {
     const id = Date.now() + Math.random()
-    set((s) => ({ toasts: [...s.toasts, { id, text, tone }] }))
-    // sale con su animación (120 ms, ver .toast.leaving) y después se quita
-    setTimeout(() => set((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t)) })), 4080)
-    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 4200)
+    set((s) => ({ toasts: [...s.toasts, { id, text, tone, action }] }))
+    // sale con su animación (120 ms, ver .toast.leaving) y después se quita; con botón, se queda más
+    const stay = action ? 9000 : 4080
+    setTimeout(() => set((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t)) })), stay)
+    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), stay + 120)
   },
   setExportOpen: (exportOpen) => set({ exportOpen }),
   trackJob: (job) => {

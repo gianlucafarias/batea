@@ -18,6 +18,15 @@ class ApiError extends Error {
   }
 }
 
+export type ExportTargetId = 'rekordbox' | 'traktor' | 'serato' | 'm3u'
+export interface ExportTarget {
+  id: ExportTargetId; label: string; available: boolean; reason: string | null
+  format: 'XML' | 'NML' | 'M3U8'; carries: string[]; loses: string[]; how_to_load: string
+}
+export interface ExportResult {
+  ok: boolean; target: ExportTargetId; path: string; files: string[]; tracks: number; missing: number; warnings: string[]
+}
+
 export function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404
 }
@@ -199,7 +208,10 @@ export const api = {
 
   exportRb: (crate_ids: (number | string)[], tags_in_comment: boolean) =>
     post<{ path: string; tracks: number; playlists: number }>('/api/export/rekordbox', { crate_ids, tags_in_comment }),
-  revealExport: () => post('/api/reveal-export'),
+  exportTargets: () => get<{ targets: ExportTarget[] }>('/api/export/targets'),
+  exportTo: (target: ExportTargetId, crate_ids: (number | string)[], tags_in_comment: boolean) =>
+    post<ExportResult>('/api/export', { target, crate_ids, tags_in_comment }),
+  revealExport: (path?: string) => post('/api/reveal-export', path ? { path } : undefined),
 }
 
 // id, bpm, energy, key, rating, title, artist, plays, online, tags

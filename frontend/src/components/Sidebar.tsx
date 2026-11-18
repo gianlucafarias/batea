@@ -218,7 +218,7 @@ export function Sidebar() {
         )}
         <div className="side-actions">
           <Sources />
-          <button className="btn sm" onClick={() => setExportOpen(true)} title="Exportar a rekordbox (XML)"><IconExport size={14} /> Exportar</button>
+          <button className="btn sm" onClick={() => setExportOpen(true)} title="Exportar cajas a rekordbox, Traktor, Serato o M3U"><IconExport size={14} /> Exportar</button>
         </div>
         <button className="btn sm ghost" onClick={() => setAgentsOpen(true)} title="Usar tu librería desde Claude, Codex, Cursor…">
           Conectar con agentes de IA

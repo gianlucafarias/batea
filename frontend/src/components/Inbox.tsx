@@ -88,7 +88,7 @@ export function Inbox() {
             <h3>Música propia</h3>
             <span className="muted num">{local.length}</span>
             <div style={{ flex: 1 }} />
-            {local.length > 0 && <button className="btn sm" onClick={() => setExportOpen(true)}>Llevar a rekordbox…</button>}
+            {local.length > 0 && <button className="btn sm" onClick={() => setExportOpen(true)}>Exportar…</button>}
           </div>
           {local.length ? (
             <div style={{ height: Math.min(520, 34 + local.length * 40), display: 'flex' }}>

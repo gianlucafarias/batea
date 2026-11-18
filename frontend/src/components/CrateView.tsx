@@ -163,7 +163,7 @@ export function CrateView() {
           <button className="btn ghost sm" disabled={dir.off} title={dir.off ? 'El disco está desconectado' : dir.path}
             onClick={() => api.revealFolder(dir.path).catch((e) => toast((e as Error).message, 'error'))}>Mostrar en Finder</button>
         )}
-        <button className="btn sm" onClick={() => setExportOpen(true)} title="Crea un archivo que rekordbox importa como playlist"><IconExport size={14} /> Exportar a rekordbox</button>
+        <button className="btn sm" onClick={() => setExportOpen(true)} title="Elegí a qué programa exportar las cajas"><IconExport size={14} /> Exportar</button>
       </header>
       <div className="toolbar">
         <FilterBar filters={filters} onChange={setFilters} onSaveSmart={saveSmart} counts={tagCounts} />

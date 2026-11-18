@@ -1033,6 +1033,26 @@ class ExportIn(BaseModel):
     tags_in_comment: bool = False
 
 
+@app.get("/api/export/targets")
+def export_targets() -> dict:
+    with db.conn() as c:
+        return {"targets": export.targets(registry.detect_all(c))}
+
+
+class ExportRunIn(BaseModel):
+    target: str
+    crate_ids: list[Any]
+    tags_in_comment: bool = False
+
+
+@app.post("/api/export")
+def export_run(body: ExportRunIn) -> dict:
+    if body.target not in export.TARGET_IDS:
+        raise HTTPException(400, "Destino desconocido")
+    with db.conn() as c:
+        return export.run(c, body.target, body.crate_ids, body.tags_in_comment)
+
+
 @app.post("/api/export/rekordbox")
 def export_rb(body: ExportIn) -> dict:
     with db.conn() as c:
@@ -1040,9 +1060,18 @@ def export_rb(body: ExportIn) -> dict:
     return res
 
 
+class RevealIn(BaseModel):
+    path: str | None = None
+
+
 @app.post("/api/reveal-export")
-def reveal_export() -> dict:
+def reveal_export(body: RevealIn | None = None) -> dict:
     p = config.EXPORT_DIR / "batea.xml"
+    if body and body.path:
+        root = config.EXPORT_DIR.resolve()
+        p = Path(body.path).resolve()
+        if p != root and root not in p.parents:
+            raise HTTPException(400, "Ese archivo no está en la carpeta de exportación")
     subprocess.run(["open", "-R", str(p)] if p.exists() else ["open", str(config.EXPORT_DIR)], check=False)
     return {"ok": True}
 

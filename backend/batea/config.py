@@ -14,7 +14,7 @@ CACHE_DIR = APP_DIR / "cache"
 ARTWORK_CACHE = CACHE_DIR / "artwork"
 RB_SNAPSHOT_DIR = APP_DIR / "rekordbox-snapshot"
 SOURCES_DIR = APP_DIR / "sources"           # copias de las librerías de otros programas (una carpeta por programa)
-EXPORT_DIR = HOME / "Music" / "Batea"
+EXPORT_DIR = Path(os.environ.get("BATEA_EXPORT_DIR", HOME / "Music" / "Batea"))
 
 # rekordbox 6/7 (solo lectura: siempre se trabaja sobre una copia)
 RB_DIR = Path(os.environ.get("BATEA_RB_DIR", HOME / "Library" / "Pioneer" / "rekordbox"))
