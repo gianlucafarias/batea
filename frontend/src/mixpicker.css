@@ -1,0 +1,28 @@
+/* ---- elegir con qué probar la mezcla (components/MixPicker.tsx) */
+.modal.mixpicker { width: 520px; max-height: min(640px, 84vh); overflow: hidden; grid-template-rows: auto auto minmax(0, 1fr); gap: 12px; padding: 20px 20px 12px; }
+.mp-head { display: grid; gap: 3px; min-width: 0; padding: 0 4px; }
+.mp-head h2 { font-size: 16px; }
+.mp-head .muted { font-size: 12px; }
+.mp-search { position: relative; display: flex; align-items: center; }
+.mp-search svg { position: absolute; left: 10px; color: var(--faint); pointer-events: none; }
+.mp-search .input { width: 100%; height: 34px; padding-left: 30px; }
+.mp-list { overflow-y: auto; margin: 0 -8px; padding: 0 8px 8px; min-height: 190px; }
+.mp-sec + .mp-sec { margin-top: 10px; }
+.mp-eb { padding: 4px 8px 4px; }
+.mp-row {
+  position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
+  width: 100%; padding: 5px 8px; border-radius: var(--r); text-align: left;
+}
+.mp-row .thumb { width: 36px; height: 36px; border-radius: 2px; overflow: hidden; }
+.mp-row .t { font-weight: 560; font-size: 12.5px; }
+.mp-row .meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.mp-main { min-width: 0; }
+.mp-bpm { font-size: 12px; }
+.mp-row[data-active] { background: var(--hover); }
+.mp-list[data-kbd] .fh-hl { opacity: 0 !important; }
+.mp-empty { padding: 18px 8px; text-align: center; }
+
+/* botón "Probar mezcla" de la ficha y texto de "Probar" en las filas */
+.mix-btn { width: 100%; justify-content: center; }
+.rel .acts .btn.txt { width: auto; padding: 0 8px 0 7px; gap: 5px; }
+.mix-new { font-size: 10.5px; font-weight: 600; color: var(--accent); margin-left: 2px; }

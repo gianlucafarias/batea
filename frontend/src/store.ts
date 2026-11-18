@@ -39,6 +39,7 @@ interface State {
   universeEditor: { id: number | null } | null     // null = cerrado; id null = universo nuevo
   tagger: { tracks: Track[]; title: string; back: { view: View; crateId: string | null } } | null
   mix: { a: number; b: number } | null
+  mixPicker: number | null                       // tema A para el que se está eligiendo con cuál probar la mezcla
   analysisQueue: { now: number | null; ids: number[] }
   editTrackId: number | null
   setEditTrack: (id: number | null) => void
@@ -55,6 +56,8 @@ interface State {
   closeTagger: () => void
   openMix: (a: number, b: number) => void
   closeMix: () => void
+  openMixPicker: (a: number) => void
+  closeMixPicker: () => void
   patchTrack: (p: Partial<Track> & { id: number }) => void
 
   askText: (title: string, value?: string) => Promise<string | null>
@@ -122,6 +125,7 @@ export const useApp = create<State>((set, get) => ({
   universeEditor: null,
   tagger: null,
   mix: null,
+  mixPicker: null,
   analysisQueue: { now: null, ids: [] },
   editTrackId: null,
   setEditTrack: (editTrackId) => set({ editTrackId }),
@@ -167,8 +171,10 @@ export const useApp = create<State>((set, get) => ({
     void get().loadMeta()
     get().bump()
   },
-  openMix: (a, b) => { usePlayer.getState().stop(); set({ mix: { a, b } }) },
+  openMix: (a, b) => { try { localStorage.setItem('batea.mixlab.seen', '1') } catch { /* sin almacenamiento */ } usePlayer.getState().stop(); set({ mix: { a, b }, mixPicker: null }) },
   closeMix: () => set({ mix: null }),
+  openMixPicker: (a) => set({ mixPicker: a }),
+  closeMixPicker: () => set({ mixPicker: null }),
   patchTrack: (p) => set({ lastPatch: { ...p } }),
 
   askText: (title, value = '') =>

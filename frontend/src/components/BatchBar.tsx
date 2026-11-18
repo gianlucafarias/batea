@@ -8,13 +8,28 @@ import { IconCheck, IconMix, IconTag, IconX } from './icons'
 
 /** Barra flotante para aplicar etiquetas, energía, puntaje o caja a varios temas a la vez. */
 export function BatchBar({ tracks, onClear }: { tracks: Track[]; onClear: () => void }) {
-  const { tags, crates, loadMeta, bump, toast, openTagger, openMix, askText, analyzeTracks } = useApp()
+  const { tags, crates, loadMeta, bump, toast, openTagger, openMix, openMixPicker, askText, analyzeTracks } = useApp()
   const toAnalyze = useMemo(() => tracks.filter((t) => t.online && (t.unanalyzed === 'pending' || t.unanalyzed === 'error')).map((t) => t.id), [tracks])
   const [pop, setPop] = useState<'tags' | 'energy' | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const ids = useMemo(() => tracks.map((t) => t.id), [tracks])
   const grouped = useMemo(() => groupTags(tags.filter((t) => t.source === 'user')), [tags])
   const userCrates = crates.filter((c) => c.kind === 'user')
+
+  // M: con 2 temas marcados abre el laboratorio; con 1, el selector (captura: gana sobre el atajo de la ficha)
+  useEffect(() => {
+    if (ids.length > 2) return
+    const h = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const st = useApp.getState()
+      if (e.key.toLowerCase() !== 'm' || e.metaKey || e.ctrlKey || e.altKey || e.repeat || st.mix || st.mixPicker != null) return
+      e.preventDefault(); e.stopPropagation()
+      if (ids.length === 2) st.openMix(ids[0], ids[1]); else st.openMixPicker(ids[0])
+    }
+    window.addEventListener('keydown', h, true)
+    return () => window.removeEventListener('keydown', h, true)
+  }, [ids])
 
   useEffect(() => {
     if (!pop) return
@@ -100,7 +115,8 @@ export function BatchBar({ tracks, onClear }: { tracks: Track[]; onClear: () => 
         </button>
       )}
       <button className="btn sm" onClick={() => openTagger(tracks, `${n} seleccionados`)} title="Escuchar y etiquetar estos temas uno por uno">Etiquetar en tanda</button>
-      {n === 2 && <button className="btn sm" onClick={() => openMix(ids[0], ids[1])}><IconMix size={13} /> Probar mezcla</button>}
+      {n === 2 && <button className="btn sm" title="Probar mezcla (M)" onClick={() => openMix(ids[0], ids[1])}><IconMix size={13} /> Probar mezcla</button>}
+      {n === 1 && <button className="btn sm" title="Probar mezcla (M)" onClick={() => openMixPicker(ids[0])}><IconMix size={13} /> Probar mezcla con…</button>}
       <button className="btn sm ghost" title="Marcar como revisados (salen de Sin clasificar)" onClick={async () => { await api.batch(ids, { reviewed: true }); await after(`${n} marcados como revisados`) }}><IconCheck size={13} /></button>
       <button className="btn sm ghost icon" onClick={onClear} title="Quitar selección (Esc)"><IconX size={13} /></button>
     </div>

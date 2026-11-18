@@ -12,6 +12,9 @@ import { IconFinder, IconLink, IconMix, IconPause, IconPlay, IconPlus, IconSearc
 import { useWaveform, Waveform } from './Waveform'
 import { GlyphSwap, HoverList } from '../lib/fluidHover'
 import { Seg } from '../lib/Seg'
+import '../mixpicker.css'
+
+function mixSeen(): boolean { try { return !!localStorage.getItem('batea.mixlab.seen') } catch { return true } }
 
 const REL_LABEL = { mix: 'Mezcla bien con', mashup: 'Mashup con', similar: 'Misma vibra que', history: 'Lo tocaste con', avoid: 'No va con' } as const
 
@@ -76,7 +79,7 @@ function Meta({ artist, bpm, k, extra }: { artist?: string | null; bpm?: number 
 }
 
 /** El motivo de una sugerencia en palabras simples (el motor lo manda pensado para la IA: "4B→4A relativa mayor/menor (tono estimado)"). */
-function plainReason(reasons: string[]): string | null {
+export function plainReason(reasons: string[]): string | null {
   const find = (re: RegExp) => reasons.find((x) => re.test(x))
   const h = find(/^lo mezclaste/)
   if (h) return h.replace(/^l/, 'L')
@@ -137,7 +140,7 @@ function RelationPicker({ seed, onDone }: { seed: TrackDetail; onDone: () => voi
 
 /** `id`: el tema que se muestra (al cerrarse la ficha sigue siendo el último mientras sale; ver App.tsx). */
 export function TrackPanel({ id: selectedId }: { id: number | null }) {
-  const { select, tags, crates, patchTrack, toast, askText, loadMeta, go, crateId, openMix, libraryVersion } = useApp()
+  const { select, tags, crates, patchTrack, toast, askText, loadMeta, go, crateId, openMix, openMixPicker, libraryVersion } = useApp()
   const { play, track: cur, playing, time, duration, seek } = usePlayer()
   const [d, setD] = useState<TrackDetail | null>(null)
   const [sourceAnalysis, setSourceAnalysis] = useState<{ id: number; sources: TrackSource[] | 'error' } | null>(null)
@@ -232,6 +235,9 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
                 onSeek={(f) => { if (isCur) seek(f * duration); else if (d.online) { play(toTrack(d)); setTimeout(() => usePlayer.getState().seek(f * (d.duration ?? 0)), 250) } }} />
             </div>
           </div>
+          <button className="btn mix-btn" title="Probar mezcla (M)" onClick={() => openMixPicker(d.id)}>
+            <IconMix size={13} /> Probar mezcla con…{!mixSeen() && <span className="mix-new">Nuevo</span>}
+          </button>
           {!d.online && <div className="faint" style={{ fontSize: 11.5 }}>{d.source !== 'local' ? 'El disco con este tema está desconectado' : 'No encuentro el archivo'}</div>}
         </div>
 
@@ -330,7 +336,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
                       extra={kind === 'history' ? `${r.direction === 'out' ? 'después' : 'antes'}, ${r.count} ${r.count === 1 ? 'vez' : 'veces'}` : null} />
                   </div>
                   <div className="acts">
-                    <button className="btn ghost sm icon" title="Probar la mezcla" aria-label="Probar la mezcla" onClick={(e) => { e.stopPropagation(); r.direction === 'in' && kind === 'history' ? openMix(r.other_id, d.id) : openMix(d.id, r.other_id) }}><IconMix size={13} /></button>
+                    <button className="btn ghost sm txt" title="Probar la mezcla" onClick={(e) => { e.stopPropagation(); r.direction === 'in' && kind === 'history' ? openMix(r.other_id, d.id) : openMix(d.id, r.other_id) }}><IconMix size={13} /> Probar</button>
                     {r.kind !== 'history' && !String(r.source ?? '').startsWith('history') && <button className="btn ghost sm icon" title="Quitar" aria-label="Quitar" onClick={async (e) => { e.stopPropagation(); await api.unrelate(r.id); load(); loadRecs() }}><IconX size={13} /></button>}
                   </div>
                 </div>
@@ -363,7 +369,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
                 <div>
                   <div className="acts">
                     {r.track.online && <button className="btn ghost sm icon" title="Escuchar" aria-label="Escuchar" onClick={(e) => { e.stopPropagation(); play(r.track) }}><IconPlay size={11} /></button>}
-                    <button className="btn ghost sm icon" title="Probar la mezcla" aria-label="Probar la mezcla" onClick={(e) => { e.stopPropagation(); openMix(d.id, r.id) }}><IconMix size={13} /></button>
+                    <button className="btn ghost sm txt" title="Probar la mezcla" onClick={(e) => { e.stopPropagation(); openMix(d.id, r.id) }}><IconMix size={13} /> Probar</button>
                     <button className="btn ghost sm icon" title="Mezclan bien" aria-label="Mezclan bien" onClick={async (e) => { e.stopPropagation(); await api.feedback(d.id, r.id, true); toast('Anotado'); load(); loadRecs() }}><IconThumbUp size={13} /></button>
                     <button className="btn ghost sm icon" title="No van" aria-label="No van" onClick={async (e) => { e.stopPropagation(); await api.feedback(d.id, r.id, false); setRecs((x) => x?.filter((y) => y.id !== r.id) ?? null); load() }}><IconThumbDown size={13} /></button>
                   </div>

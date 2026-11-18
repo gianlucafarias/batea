@@ -5,6 +5,7 @@ import { Home } from './components/Home'
 import { Inbox } from './components/Inbox'
 import { MapScreen } from './components/MapScreen'
 import { MixLab } from './components/MixLab'
+import { MixPickerHost } from './components/MixPicker'
 import { Tagger } from './components/Tagger'
 import { UniverseEditor } from './components/Universe'
 import { ExportDialog, Player, PromptModal, Toasts } from './components/Overlays'
@@ -96,7 +97,13 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-      if (useApp.getState().mix) return        // el laboratorio de mezcla maneja su propio teclado
+      const st = useApp.getState()
+      if (st.mix || st.mixPicker != null) return   // el laboratorio y el selector de mezcla manejan su propio teclado
+      if (e.key.toLowerCase() === 'm' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat && st.view !== 'tagger' && st.selectedId != null) {
+        e.preventDefault()
+        st.openMixPicker(st.selectedId)
+        return
+      }
       const button = e.target instanceof Element && e.target.closest('button, [role="button"]')
       if (e.code === 'Space' && !e.defaultPrevented && !button) {
         e.preventDefault()
@@ -140,6 +147,7 @@ export default function App() {
       <SettingsDialog />
       <UniverseEditor />
       <MixLab />
+      <MixPickerHost />
       <PromptModal />
       <TrackMenu />
       <EditTrackDialog />
