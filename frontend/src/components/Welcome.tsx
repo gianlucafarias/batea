@@ -426,7 +426,7 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
           <div className="su-foot">
             <span className="faint">Podés marcar más de uno. Batea lee una copia y nunca cambia nada en tus programas.</span>
             <button className="btn primary wl-cta" disabled={locked || (search === 'folder' && !path)} onClick={() => nothing ? setConfirming(true) : onStart(plan)}>
-              {nothing ? 'Entrar sin importar nada' : 'Empezar'}
+              {nothing ? 'Lo haré después' : 'Empezar'}
             </button>
           </div>
         </main>
