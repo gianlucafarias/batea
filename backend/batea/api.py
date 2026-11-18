@@ -1194,12 +1194,17 @@ def live_settings_set(body: LiveSettingsIn) -> dict:
 if config.FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=config.FRONTEND_DIST / "assets"), name="assets")
 
+    # index.html nunca se guarda en caché: apunta a los archivos de la versión instalada (con su hash en el
+    # nombre). Sin esto, la vista web de macOS reusa el index.html de la versión anterior después de actualizar
+    # (mismo puerto, misma dirección) y se ve la interfaz vieja.
+    NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate"}
+
     @app.get("/{full_path:path}")
     def spa(full_path: str):
         f = config.FRONTEND_DIST / full_path
         if full_path and f.is_file():
-            return FileResponse(f)
-        return FileResponse(config.FRONTEND_DIST / "index.html")
+            return FileResponse(f, headers=NO_CACHE)
+        return FileResponse(config.FRONTEND_DIST / "index.html", headers=NO_CACHE)
 else:
     @app.get("/")
     def no_frontend():

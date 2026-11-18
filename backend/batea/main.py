@@ -158,6 +158,35 @@ def _start_traktor_broadcast() -> None:
         print(f"Traktor Broadcasting: no arrancó ({e})", file=sys.stderr)
 
 
+def _fresh_webview_cache() -> None:
+    """Después de actualizar, borra el caché de la vista web de macOS antes de abrir la ventana.
+
+    La app sirve la interfaz siempre en la misma dirección; las versiones hasta la 0.3.0 no le pedían a la vista
+    web que no guardara index.html, y macOS podía seguir mostrando la interfaz de la versión anterior.
+    """
+    from pathlib import Path
+    import shutil
+
+    from . import config as cfg, runtime
+
+    if not runtime.frozen():
+        return
+    info = runtime.build_info()
+    stamp = f"{info.get('version')}:{info.get('fingerprint')}"
+    marker = cfg.APP_DIR / "webview-version"
+    try:
+        if marker.read_text() == stamp:
+            return
+    except OSError:
+        pass
+    shutil.rmtree(Path.home() / "Library" / "Caches" / "app.batea.mac" / "WebKit", ignore_errors=True)
+    try:
+        cfg.APP_DIR.mkdir(parents=True, exist_ok=True)
+        marker.write_text(stamp)
+    except OSError:
+        pass
+
+
 def main() -> None:
     if _run_module_mode():
         return
@@ -187,6 +216,7 @@ def main() -> None:
     while not server.started:
         time.sleep(0.05)
 
+    _fresh_webview_cache()
     api = JsApi()
     window = webview.create_window(
         "Batea", f"http://127.0.0.1:{port}/", js_api=api,
