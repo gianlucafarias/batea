@@ -5,7 +5,7 @@ import { useApp, usePlayer } from '../store'
 import { cleanTitle, fmtTime } from '../util'
 import { Sleeve } from './bits'
 import { folderCrate } from './FolderTree'
-import { IconPause, IconPlay, IconVolume } from './icons'
+import { IconMix, IconPause, IconPlay, IconVolume } from './icons'
 import { useWaveform, Waveform } from './Waveform'
 import { GlyphSwap, HoverList } from '../lib/fluidHover'
 import { spring, usePresence } from '../lib/motion'
@@ -175,6 +175,7 @@ export function Toasts() {
 export function Player() {
   const { track, playing, time, duration, toggle, seek, volume, setVolume, error } = usePlayer()
   const select = useApp((s) => s.select)
+  const openMixPicker = useApp((s) => s.openMixPicker)
   const wave = useWaveform(track?.id)
   const lastVol = useRef(0.8)
   return (
@@ -199,6 +200,7 @@ export function Player() {
           <Waveform data={track ? wave : null} progress={duration ? time / duration : 0} onSeek={(f) => seek(f * duration)} introBars={track?.intro_bars} outroBars={track?.outro_bars} />
         </div>
         <span className="num muted" style={{ fontSize: 11, width: 36 }}>{fmtTime(duration || track?.duration)}</span>
+        <button className="btn ghost sm" disabled={!track} title="Probar mezcla con otro tema (M)" onClick={() => track && openMixPicker(track.id)}><IconMix size={13} /> Mezclar con…</button>
       </div>
       <div className="vol">
         <button className="btn ghost sm icon" aria-label={volume ? 'Silenciar' : 'Volver a escuchar'} title={volume ? 'Silenciar' : 'Volver a escuchar'}

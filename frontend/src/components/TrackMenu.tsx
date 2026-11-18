@@ -205,6 +205,7 @@ export function TrackMenu() {
       <Sep />
 
       {one && <Item onClick={run(compatibles)} disabled={!one.key && !one.bpm} hint="Temas de toda la colección con tono compatible y BPM parecido">Buscar compatibles para mezclar</Item>}
+      {one && <Item onClick={run(() => app.openMixPicker(one.id))} hint="Elegí con qué tema">Probar mezcla con…</Item>}
       {n === 2 && <Item onClick={run(() => app.openMix(ids[0], ids[1]))}>Probar la mezcla</Item>}
       {mixWith && one && <Item onClick={run(() => app.openMix(mixWith.id, one.id))} hint={`Con “${cleanTitle(mixWith.title)}”`}>Probar mezcla con el que suena</Item>}
       <Item onClick={run(async () => { await api.batch(ids, { reviewed: true }); await refresh(); app.toast(n === 1 ? 'Marcado como revisado' : `${n} marcados como revisados`) })}

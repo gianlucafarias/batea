@@ -5,7 +5,7 @@ import { usePlayer, useApp } from '../store'
 import type { Track } from '../types'
 import { cleanTitle, fmtBpm, fmtDate, fmtTime, hash } from '../util'
 import { EnergyMeter, KeyBadge, Sleeve, Stars } from './bits'
-import { IconPause, IconPlay } from './icons'
+import { IconMix, IconPause, IconPlay } from './icons'
 import { SourceBadges } from './SourceBadges'
 
 const BEHIND = 14
@@ -17,6 +17,7 @@ export function Digger({ tracks, crateName }: { tracks: Track[]; crateName: stri
   const stage = useRef<HTMLDivElement>(null)
   const [dim, setDim] = useState({ w: 800, h: 600 })
   const select = useApp((s) => s.select)
+  const openMixPicker = useApp((s) => s.openMixPicker)
   const panelOpen = useApp((s) => s.selectedId != null)
   const tagsAll = useApp((s) => s.tags)
   const tagById = useMemo(() => new Map(tagsAll.map((t) => [t.id, t])), [tagsAll])
@@ -58,6 +59,7 @@ export function Digger({ tracks, crateName }: { tracks: Track[]; crateName: stri
     else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'k') { e.preventDefault(); step(e.shiftKey ? -10 : -1) }
     else if (e.key === 'Enter' && t) { e.preventDefault(); play(t) }
     else if (e.key === 'i' && t) select(t.id)
+    else if (e.key === 'm' && t && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); openMixPicker(t.id) }
   }
 
   // geometría: el disco del frente apenas levantado; los de atrás asoman por arriba (como al mirar dentro de una batea)
@@ -73,7 +75,7 @@ export function Digger({ tracks, crateName }: { tracks: Track[]; crateName: stri
   return (
     <div className={`digger${panelOpen ? ' solo' : ''}`}>
       <div className="dig-stage" ref={stage} tabIndex={0} onKeyDown={onKey}>
-        <div className="dig-hint"><span><kbd>↑</kbd><kbd>↓</kbd> o rueda para hojear</span><span><kbd>⏎</kbd> escuchar</span><span><kbd>i</kbd> ficha</span></div>
+        <div className="dig-hint"><span><kbd>↑</kbd><kbd>↓</kbd> o rueda para hojear</span><span><kbd>⏎</kbd> escuchar</span><span><kbd>i</kbd> ficha</span><span><kbd>m</kbd> mezclar</span></div>
         <div className="dig-counter">{focus + 1} / {n.toLocaleString('es-AR')}</div>
         <div className="dig-stack" style={{ ['--size' as string]: `${size}px`, bottom: BOTTOM }}>
           {tracks.slice(Math.max(0, focus - AHEAD), focus + BEHIND).map((tr, j) => {
@@ -135,6 +137,7 @@ export function Digger({ tracks, crateName }: { tracks: Track[]; crateName: stri
               {current?.id === t.id && playing ? <><IconPause size={13} /> Pausa</> : <><IconPlay size={13} /> Escuchar</>}
             </button>
             <button className="btn" onClick={() => select(t.id)}>Ficha</button>
+            <button className="btn" title="Probar mezcla (M)" onClick={() => openMixPicker(t.id)}><IconMix size={13} /> Probar mezcla</button>
           </div>
           {!t.online && <div className="faint" style={{ fontSize: 11.5, marginTop: -6 }}>Disco desconectado</div>}
           <AnalysisNotice t={t} online={!!t.online} />
