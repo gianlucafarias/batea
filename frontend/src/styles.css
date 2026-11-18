@@ -353,7 +353,7 @@ button.chip:hover { border-color: #5a534b; color: var(--text); }
 .list { flex: 1; overflow: auto; }
 .lrow {
   display: grid; align-items: center; height: 40px; padding: 0 28px; gap: 12px; border-bottom: 1px solid #1c1a18; cursor: default;
-  grid-template-columns: 30px 32px minmax(180px, 2.2fr) minmax(120px, 1.3fr) 64px 56px 46px 82px 76px minmax(120px, 1.6fr) 64px 70px 44px;
+  grid-template-columns: 30px 32px minmax(180px, 2.2fr) minmax(120px, 1.3fr) 56px 46px 82px 76px 52px minmax(110px, 1.6fr) 54px 70px 66px;
 }
 .list .fh-hl { border-radius: 0; }
 .lrow.sel { background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }

@@ -15,9 +15,9 @@ import { useFluidHover } from '../lib/fluidHover'
 export type SortKey = 'position' | 'title' | 'artist' | 'bpm' | 'key' | 'energy' | 'rating' | 'date_added' | 'intro_bars' | 'play_count' | 'duration'
 
 const COLS: { key: SortKey | null; label: string }[] = [
-  { key: 'position', label: '#' }, { key: null, label: '' }, { key: 'title', label: 'Tema' }, { key: 'artist', label: 'Artista' }, { key: null, label: 'Programa' },
-  { key: 'bpm', label: 'BPM' }, { key: 'key', label: 'Tono' }, { key: 'energy', label: 'Energía' }, { key: 'rating', label: 'Puntaje' },
-  { key: null, label: 'Etiquetas' }, { key: 'intro_bars', label: 'In/Out' }, { key: 'date_added', label: 'Agregado' }, { key: 'duration', label: 'Largo' },
+  { key: 'position', label: '#' }, { key: null, label: '' }, { key: 'title', label: 'Tema' }, { key: 'artist', label: 'Artista' },
+  { key: 'bpm', label: 'BPM' }, { key: 'key', label: 'Tono' }, { key: 'energy', label: 'Energía' }, { key: 'rating', label: 'Puntaje' }, { key: null, label: 'Programa' },
+  { key: null, label: 'Etiquetas' }, { key: 'intro_bars', label: 'In/Out' }, { key: 'date_added', label: 'Agregado' }, { key: 'duration', label: 'Duración' },
 ]
 
 export function sortTracks(tracks: Track[], key: SortKey, dir: 1 | -1): Track[] {
@@ -86,11 +86,11 @@ export function ListView({ tracks, sort, onSort, multi, onPick }: { tracks: Trac
                 <span className="ellipsis">{cleanTitle(t.title)}</span><AnalysisBadge t={t} />
               </div>
               <div className="cell muted"><ArtistLinks artist={t.artist} /></div>
-              <div className="lsources"><SourceBadges sources={t.sources} /></div>
               <div className="cell num">{fmtBpm(t.bpm)}</div>
               <div><KeyBadge k={t.key} est={!!t.key_est} /></div>
               <div><EnergyMeter value={t.energy} auto={!t.energy_user} /></div>
               <div onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}><Stars value={t.rating} onChange={(v) => rate(t.id, v)} /></div>
+              <div className="lsources"><SourceBadges sources={t.sources} /></div>
               <div className="mini-tags">
                 {t.tags.slice(0, 4).map((id) => {
                   const tg = tagById.get(id)
