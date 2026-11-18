@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, isNotFound, type LibrarySource } from '../api'
-import { spring, usePresence } from '../lib/motion'
 import { crateSource, isActiveJob, isQueuedJob, legacyRekordbox, pickSourcePath, sourceName, syncJobSource, syncSource } from '../sources'
 import { useApp } from '../store'
 import type { Job } from '../types'
@@ -29,8 +28,9 @@ function sourceStatus(source: LibrarySource): string {
   return `Leído ${since}`
 }
 
-export function Sources() {
-  const { status, jobs, trackJob, loadMeta, refreshSources, updateSource, bump, toast, sourcesOpen, setSourcesOpen } = useApp()
+/** Estado y acciones compartidas entre el aviso de la barra lateral y el panel de Ajustes. */
+function useSourceActions() {
+  const { status, jobs, trackJob, loadMeta, updateSource, bump, toast } = useApp()
   const legacy = !status?.sources
   const sources = status?.sources ?? [legacyRekordbox(status)]
   const enabled = sources.filter((source) => source.enabled)
@@ -42,43 +42,7 @@ export function Sources() {
     if (kind && isActiveJob(job)) syncing.set(kind, job)
   }
   const [pending, setPending] = useState(false)
-  const [adding, setAdding] = useState(false)
-  const [menu, setMenu] = useState<string | null>(null)
   const [dismissed, setDismissed] = useState(readDismissed)
-  const [shown, closing] = usePresence(sourcesOpen, spring.moderate.exit)
-  const root = useRef<HTMLDivElement>(null)
-  const trigger = useRef<HTMLButtonElement>(null)
-  const notice = foundInactive.find((source) => !dismissed.includes(source.kind))
-
-  useEffect(() => {
-    if (legacy) return
-    const refresh = () => { void refreshSources().catch(() => undefined) }
-    const interval = window.setInterval(refresh, 15000)
-    window.addEventListener('focus', refresh)
-    return () => {
-      window.clearInterval(interval)
-      window.removeEventListener('focus', refresh)
-    }
-  }, [legacy, refreshSources])
-
-  useEffect(() => {
-    if (!sourcesOpen) return
-    if (!root.current?.contains(document.activeElement)) trigger.current?.focus()
-    const outside = (event: MouseEvent) => {
-      if (!root.current?.contains(event.target as Node)) setSourcesOpen(false)
-    }
-    const escape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      setSourcesOpen(false)
-      trigger.current?.focus()
-    }
-    document.addEventListener('mousedown', outside)
-    document.addEventListener('keydown', escape)
-    return () => {
-      document.removeEventListener('mousedown', outside)
-      document.removeEventListener('keydown', escape)
-    }
-  }, [sourcesOpen, setSourcesOpen])
 
   const run = async (action: () => Promise<void>) => {
     setPending(true)
@@ -100,7 +64,6 @@ export function Sources() {
       if (app.view === 'crate' && app.crates.some((crate) => String(crate.id) === app.crateId && crateSource(crate) === source.kind)) app.go('home')
     }
     updateSource({ ...source, enabled: result.enabled })
-    setMenu(null)
     try {
       if (result.enabled && source.found) trackJob(await syncSource(source.kind))
     } finally {
@@ -114,8 +77,7 @@ export function Sources() {
     if (!path) return
     const updated = await api.setSourceLocation(source.kind, path)
     updateSource(updated)
-    if (updated.found) setMenu(null)
-    else toast(`No encontré ${source.label} en esa ubicación`, 'error')
+    if (!updated.found) toast(`No encontré ${source.label} en esa ubicación`, 'error')
   })
 
   const syncAll = () => run(async () => {
@@ -132,6 +94,44 @@ export function Sources() {
     const { autodiscover } = await api.setAutodiscover(!status?.autodiscover)
     useApp.setState((s) => ({ status: s.status && { ...s.status, autodiscover } }))
   })
+
+  return { status, legacy, enabled, foundInactive, savedInactive, syncing, pending, run, dismissed, dismiss, toggleSource, locate, syncAll, toggleAuto, trackJob }
+}
+
+/** Aviso en la barra lateral cuando aparece un programa nuevo; mantiene la detección al día. */
+export function SourcesNotice() {
+  const { refreshSources } = useApp()
+  const { legacy, foundInactive, dismissed, dismiss, toggleSource, pending } = useSourceActions()
+  const notice = foundInactive.find((source) => !dismissed.includes(source.kind))
+
+  useEffect(() => {
+    if (legacy) return
+    const refresh = () => { void refreshSources().catch(() => undefined) }
+    const interval = window.setInterval(refresh, 15000)
+    window.addEventListener('focus', refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [legacy, refreshSources])
+
+  if (!notice) return null
+  return (
+    <div className="source-notice">
+      <span>Encontré {notice.label} en esta Mac. ¿Traigo tu librería?</span>
+      <div>
+        <button className="btn sm" disabled={pending} onClick={() => void toggleSource(notice)}>Traer</button>
+        <button className="btn ghost sm" disabled={pending} onClick={() => dismiss(notice.kind)}>No</button>
+      </div>
+    </div>
+  )
+}
+
+/** Pestaña "Programas" de Ajustes: un renglón por programa, tu música y agregar otro. */
+export function SourcesPanel() {
+  const { status, legacy, enabled, foundInactive, savedInactive, syncing, pending, run, toggleSource, locate, syncAll, toggleAuto, trackJob } = useSourceActions()
+  const [adding, setAdding] = useState(false)
+  const [menu, setMenu] = useState<string | null>(null)
 
   const renderRow = (source: LibrarySource) => {
     const name = sourceName(source)
@@ -161,8 +161,8 @@ export function Sources() {
                 {source.locations.map(({ path, volume }) => <div className="muted" key={path}>{volume ? `${volume} · ` : ''}<code>{path}</code></div>)}
               </details>
             )}
-            <button className="btn ghost sm" disabled={pending || !!syncJob} onClick={() => void locate(source)}>Cambiar carpeta…</button>
-            <button className="btn ghost sm" disabled={pending || !!syncJob} onClick={() => void toggleSource(source)}>{source.enabled ? 'Dejar de usar' : 'Usar'}</button>
+            <button className="btn ghost sm" disabled={pending || !!syncJob} onClick={() => { setMenu(null); void locate(source) }}>Cambiar carpeta…</button>
+            <button className="btn ghost sm" disabled={pending || !!syncJob} onClick={() => { setMenu(null); void toggleSource(source) }}>{source.enabled ? 'Dejar de usar' : 'Usar'}</button>
           </div>
         )}
       </div>
@@ -170,57 +170,32 @@ export function Sources() {
   }
 
   return (
-    <>
-      {notice && (
-        <div className="source-notice">
-          <span>Encontré {notice.label} en esta Mac. ¿Traigo tu librería?</span>
-          <div>
-            <button className="btn sm" disabled={pending} onClick={() => void toggleSource(notice)}>Traer</button>
-            <button className="btn ghost sm" disabled={pending} onClick={() => dismiss(notice.kind)}>No</button>
-          </div>
+    <div className="settings-sources">
+      {!legacy && (
+        <div className="source-line">
+          <span className="muted">Batea lee una copia de cada programa y nunca les cambia nada.</span>
+          <button className="btn sm" disabled={pending || Boolean(syncing.size) || !enabled.some((source) => source.found)} onClick={() => void syncAll()}>
+            <IconSync size={13} /> Actualizar todos
+          </button>
         </div>
       )}
-      <div className="sources-anchor" ref={root}>
-        <button
-          ref={trigger}
-          className="btn sm sources-trigger"
-          aria-expanded={sourcesOpen}
-          aria-controls="library-sources"
-          onClick={() => {
-            setSourcesOpen(!sourcesOpen)
-            if (!sourcesOpen && !legacy) void refreshSources().catch(() => undefined)
-          }}
-        >Programas</button>
-        {shown && (
-          <section id="library-sources" aria-label="Programas" className={`popover sources-pop${closing ? ' closing' : ''}`} inert={closing}>
-            <div className="source-line">
-              <span className="eyebrow">Tus programas</span>
-              {!legacy && (
-                <button className="btn sm" disabled={pending || Boolean(syncing.size) || !enabled.some((source) => source.found)} onClick={() => void syncAll()}>
-                  <IconSync size={13} /> Actualizar todos
-                </button>
-              )}
-            </div>
-            {enabled.map(renderRow)}
-            {savedInactive.map(renderRow)}
-            <div className="source-line source-row">
-              <div className="source-info">
-                <b>Tu música</b>
-                <span className="muted">{status?.autodiscover ? 'Busca sola al abrir Batea y al conectar un disco' : 'Búsqueda automática apagada'}</span>
-              </div>
-              <button className="btn sm ghost" aria-label={`${status?.autodiscover ? 'Apagar' : 'Prender'} la búsqueda automática`} disabled={pending} onClick={() => void toggleAuto()}>
-                {status?.autodiscover ? 'Apagar' : 'Prender'}
-              </button>
-            </div>
-            {!legacy && (
-              <div className="sources-add">
-                <button className="btn sm ghost" aria-expanded={adding} onClick={() => setAdding(!adding)}><IconPlus size={13} /> Agregar otro programa…</button>
-                {adding && (foundInactive.length ? foundInactive.map(renderRow) : <div className="muted">No hay otros programas de DJ en esta Mac.</div>)}
-              </div>
-            )}
-          </section>
-        )}
+      {enabled.map(renderRow)}
+      {savedInactive.map(renderRow)}
+      <div className="source-line source-row">
+        <div className="source-info">
+          <b>Tu música</b>
+          <span className="muted">{status?.autodiscover ? 'Busca sola al abrir Batea y al conectar un disco' : 'Búsqueda automática apagada'}</span>
+        </div>
+        <button className="btn sm ghost" aria-label={`${status?.autodiscover ? 'Apagar' : 'Prender'} la búsqueda automática`} disabled={pending} onClick={() => void toggleAuto()}>
+          {status?.autodiscover ? 'Apagar' : 'Prender'}
+        </button>
       </div>
-    </>
+      {!legacy && (
+        <div className="sources-add source-row">
+          <button className="btn sm ghost" aria-expanded={adding} onClick={() => setAdding(!adding)}><IconPlus size={13} /> Agregar otro programa…</button>
+          {adding && (foundInactive.length ? foundInactive.map(renderRow) : <div className="muted">No hay otros programas de DJ en esta Mac.</div>)}
+        </div>
+      )}
+    </div>
   )
 }

@@ -999,3 +999,17 @@ kbd {
 .su-confirm-modal { width: 440px; }
 .su-confirm-modal p { margin: 8px 0 0; line-height: 1.5; font-size: 13.5px; }
 .su-confirm-modal .wl-cta-row { display: flex; justify-content: flex-end; gap: 8px; }
+/* Ajustes: programas y agentes de IA */
+.modal.settings { width: 600px; height: min(620px, 84vh); grid-template-rows: auto 1fr auto; gap: 14px; overflow: hidden; }
+.settings-head { display: grid; gap: 12px; }
+.settings-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.settings-tabs button { padding: 8px 12px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--muted); font-size: 13px; font-weight: 600; transition: color var(--moderate) var(--ease), border-color var(--moderate) var(--ease); }
+.settings-tabs button:hover { color: var(--text-2); }
+.settings-tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+.settings-body { overflow-y: auto; min-height: 0; }
+.settings-sources, .settings-agents { display: grid; gap: 10px; align-content: start; }
+.settings-sources .source-info { font-size: 13px; }
+.settings-sources .source-info .muted { font-size: 12px; }
+.settings-sources > .source-line:first-child { font-size: 12.5px; gap: 12px; }
+.settings-foot { display: flex; justify-content: flex-end; }
+.side-foot .source-notice { margin-bottom: 6px; }

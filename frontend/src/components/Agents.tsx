@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { spring, usePresence } from '../lib/motion'
 import { api, type AgentInfo, type AgentList } from '../api'
 import { useApp } from '../store'
 
@@ -10,22 +9,17 @@ const STATUS: Record<AgentInfo['status'], { text: string; color: string }> = {
   missing: { text: 'No instalado', color: 'var(--faint)' },
 }
 
-/** Conectar el MCP de Batea con Claude Code, Codex, Cursor… sin tocar la terminal. */
-export function AgentsDialog() {
-  const { agentsOpen, setAgentsOpen, toast } = useApp()
+/** Pestaña de Ajustes: conectar el MCP de Batea con Claude Code, Codex, Cursor… sin tocar la terminal. */
+export function AgentsPanel() {
+  const { toast } = useApp()
   const [list, setList] = useState<AgentList | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null)
   const [showManual, setShowManual] = useState(false)
 
-  const [shown, closing] = usePresence(agentsOpen, spring.slow.exit)
   useEffect(() => {
-    if (!agentsOpen) return
-    setTest(null); setShowManual(false)
     api.agents().then(setList).catch((e) => toast((e as Error).message, 'error'))
-  }, [agentsOpen, toast])
-
-  if (!shown) return null
+  }, [toast])
 
   const change = async (a: AgentInfo, connected: boolean) => {
     setBusy(a.id)
@@ -40,14 +34,10 @@ export function AgentsDialog() {
   const manual = list ? JSON.stringify(list.manual, null, 2) : ''
 
   return (
-    <div className={`modal-bg${closing ? ' closing' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && setAgentsOpen(false)}>
-      <div className="modal">
-        <div>
-          <h2>Conectar con agentes de IA</h2>
-          <p className="muted" style={{ margin: '6px 0 0', lineHeight: 1.5 }}>
-            Tu agente puede leer la librería para responder preguntas o armar sets. Solo puede crear cajas y nunca toca rekordbox.
-          </p>
-        </div>
+    <div className="settings-agents">
+        <p className="muted" style={{ margin: 0, lineHeight: 1.5 }}>
+          Conectá Claude, Codex o Cursor para preguntarle por tu librería o pedirle que arme sets. El agente puede leer y crear cajas, nada más.
+        </p>
 
         {!list ? <div className="muted">Buscando agentes instalados…</div> : (
           <div style={{ display: 'grid', gap: 8 }}>
@@ -96,10 +86,7 @@ export function AgentsDialog() {
           }}>{busy === 'test' ? 'Probando…' : 'Probar el servidor'}</button>
           <button className="btn ghost sm" onClick={() => setShowManual(!showManual)}>{showManual ? 'Ocultar' : 'Otro agente…'}</button>
           {showManual && <button className="btn ghost sm" onClick={() => { void navigator.clipboard?.writeText(manual).then(() => toast('Copiado')) }}>Copiar</button>}
-          <span style={{ flex: 1 }} />
-          <button className="btn primary sm" onClick={() => setAgentsOpen(false)}>Listo</button>
         </div>
-      </div>
     </div>
   )
 }

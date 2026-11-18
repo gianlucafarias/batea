@@ -3,9 +3,9 @@ import { api } from '../api'
 import { CORE_SOURCES, crateSource, isQueuedJob, isSessionCrate, sourceLabel } from '../sources'
 import { useApp } from '../store'
 import type { Crate } from '../types'
-import { BrandMark, IconChevron, IconCrate, IconExport, IconEye, IconEyeOff, IconInbox, IconMap, IconPlus, IconTag } from './icons'
+import { BrandMark, IconChevron, IconCrate, IconExport, IconEye, IconEyeOff, IconInbox, IconMap, IconPlus, IconTag, IconSettings } from './icons'
 import { FolderTree } from './FolderTree'
-import { Sources } from './Sources'
+import { SourcesNotice } from './Sources'
 import { UniverseSwitcher } from './Universe'
 import { useFluidHover } from '../lib/fluidHover'
 
@@ -94,7 +94,7 @@ function ProgramTree({ kind, crates, empty }: { kind: string; crates: Crate[]; e
 }
 
 export function Sidebar() {
-  const { view, crateId, go, crates, virtualCrates, jobs, status, toast, setExportOpen, setAgentsOpen, loadMeta, openTagger, update } = useApp()
+  const { view, crateId, go, crates, virtualCrates, jobs, status, toast, setExportOpen, setSettings, loadMeta, openTagger, update } = useApp()
   const [showFolders, setShowFolders] = useState(true)
   const navHover = useFluidHover<HTMLElement>()
   const listHover = useFluidHover<HTMLDivElement>()
@@ -214,13 +214,11 @@ export function Sidebar() {
             ))}
           </div>
         )}
+        <SourcesNotice />
         <div className="side-actions">
-          <Sources />
+          <button className="btn sm" onClick={() => setSettings('programs')} title="Programas de DJ y agentes de IA"><IconSettings size={14} /> Ajustes</button>
           <button className="btn sm" onClick={() => setExportOpen(true)} title="Exportar cajas a rekordbox, Traktor, Serato o M3U"><IconExport size={14} /> Exportar</button>
         </div>
-        <button className="btn sm ghost" onClick={() => setAgentsOpen(true)} title="Usar tu librería desde Claude, Codex, Cursor…">
-          Conectar con agentes de IA
-        </button>
         <button className="btn sm ghost" onClick={() => useApp.getState().setWelcome('replay')} title="Volver a ver la presentación">
           Ver la presentación
         </button>

@@ -3,6 +3,8 @@ import { api, audioUrl, isNotFound, type LibrarySource, type Status, type Update
 import { crateSource, isActiveJob } from './sources'
 import type { Crate, Filters, FolderNode, Job, Tag, Track, UniverseList } from './types'
 
+export type SettingsTab = 'programs' | 'agents'
+
 export type View = 'home' | 'crate' | 'map' | 'inbox' | 'tagger'
 
 interface Toast { id: number; text: string; tone?: 'ok' | 'error'; leaving?: boolean; action?: { label: string; run: () => void } }
@@ -27,9 +29,9 @@ interface State {
   toasts: Toast[]
   libraryVersion: number
   exportOpen: boolean
-  sourcesOpen: boolean
+  settings: SettingsTab | null
+  setSettings: (v: SettingsTab | null) => void
   setSourcesOpen: (v: boolean) => void
-  agentsOpen: boolean
   setAgentsOpen: (v: boolean) => void
   ask: { title: string; value: string; resolve: (v: string | null) => void } | null
   lastPatch: (Partial<Track> & { id: number }) | null
@@ -110,10 +112,10 @@ export const useApp = create<State>((set, get) => ({
   toasts: [],
   libraryVersion: 0,
   exportOpen: false,
-  sourcesOpen: false,
-  setSourcesOpen: (sourcesOpen) => set({ sourcesOpen }),
-  agentsOpen: false,
-  setAgentsOpen: (agentsOpen) => set({ agentsOpen }),
+  settings: null,
+  setSettings: (settings) => set({ settings }),
+  setSourcesOpen: (v) => set({ settings: v ? 'programs' : null }),
+  setAgentsOpen: (v) => set({ settings: v ? 'agents' : null }),
   ask: null,
   lastPatch: null,
   universes: null,

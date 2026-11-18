@@ -424,7 +424,7 @@ function SetupScreen({ onStart, busy }: { onStart: (plan: SetupPlan) => void; bu
           <div className="modal su-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="su-confirm-t" aria-describedby="su-confirm-d">
             <div>
               <h2 id="su-confirm-t">¿Lo dejás para después?</h2>
-              <p id="su-confirm-d" className="muted">Sin música, Bateas, Mapa y Sugerencias quedan vacías. Podés traerla cuando quieras con el botón Programas, abajo a la izquierda.</p>
+              <p id="su-confirm-d" className="muted">Sin música, Bateas, Mapa y Sugerencias quedan vacías. Podés traerla cuando quieras en Ajustes, abajo a la izquierda.</p>
             </div>
             <div className="wl-cta-row">
               <button className="btn ghost" autoFocus disabled={busy} onClick={() => setConfirming(false)}>Volver</button>
@@ -532,9 +532,9 @@ function LoadingPanel({ load, plan, finish }: { load: Load; plan: SetupPlan; fin
   if (done) {
     title = failed ? 'Algo no se pudo leer' : empty ? 'Batea quedó vacía, por ahora' : 'Tu librería está lista'
     sub = failed
-      ? 'Probá de nuevo con el botón Programas, abajo a la izquierda, o desde «Analizar e importar».'
+      ? 'Probá de nuevo en Ajustes, abajo a la izquierda, o desde «Analizar e importar».'
       : empty
-        ? 'Traé música con el botón Programas, abajo a la izquierda, o desde «Analizar e importar».'
+        ? 'Traé música en Ajustes, abajo a la izquierda, o desde «Analizar e importar».'
         : `${fmt(tracks)} temas${local ? `, ${fmt(local)} fuera de tus programas` : ''}.`
   }
   const progress = done ? 1 : active?.progress ?? 0

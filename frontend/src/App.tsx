@@ -1,5 +1,5 @@
+import { SettingsDialog } from './components/Settings'
 import { useCallback, useEffect, useState } from 'react'
-import { AgentsDialog } from './components/Agents'
 import { CrateView } from './components/CrateView'
 import { Home } from './components/Home'
 import { Inbox } from './components/Inbox'
@@ -137,7 +137,7 @@ export default function App() {
       </div>
       <div className="player-slot"><Player /></div>
       <ExportDialog />
-      <AgentsDialog />
+      <SettingsDialog />
       <UniverseEditor />
       <MixLab />
       <PromptModal />
