@@ -164,6 +164,23 @@ export function drawTimeline(
   // curvas de la franja del medio
   const toAt = (t: number) => (t - mixT) / A.bar
   ctx.textAlign = 'left'
+  // con el crossfader elegido, los graves se ven de fondo: también cambian solos
+  if (group === 'x') {
+    for (const lane of lanesOf(0)) {
+      ctx.beginPath()
+      for (let px = 0; px <= width; px += 3) {
+        const y = valueY(height, lane, evaluate(automation[lane], toAt(left + px * dt)))
+        if (px === 0) ctx.moveTo(px, y)
+        else ctx.lineTo(px, y)
+      }
+      ctx.strokeStyle = laneColor(lane)
+      ctx.globalAlpha = 0.28
+      ctx.setLineDash([3, 3])
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.globalAlpha = 1
+    }
+  }
   for (const lane of lanesOf(group)) {
     const { top, bottom } = laneBox(height, lane)
     const color = laneColor(lane)

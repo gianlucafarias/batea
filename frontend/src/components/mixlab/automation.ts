@@ -21,20 +21,16 @@ const pt = (at: number, v: number): Point => ({ at, v })
 /** Las curvas de cada tipo de transición, para `bars` compases. */
 export function preset(style: Transition, bars: number): Automation {
   const empty: Automation = { x: [], A0: [], A1: [], A2: [], B0: [], B1: [], B2: [] }
-  const half = bars / 2
   if (style === 'cut') return { ...empty, x: [pt(0, 0), pt(0, 1)] }
-  if (style === 'blend') {
-    // fundido parejo; los graves se pasan de a poco: B los sube en la primera mitad, A los baja en la segunda
-    return { ...empty, x: [pt(0, 0), pt(bars, 1)], B0: [pt(0, KILL), pt(half, 0)], A0: [pt(half, 0), pt(bars, KILL)] }
-  }
-  // cambio de graves: B entra sin graves, a mitad del solape se cruzan (en 1 o 2 compases) y después se va A
-  const ramp = bars >= 32 ? 2 : 1
-  return {
-    ...empty,
-    x: [pt(0, 0), pt(bars / 4, 0.5), pt(bars * 3 / 4, 0.5), pt(bars, 1)],
-    B0: [pt(0, KILL), pt(half - ramp, KILL), pt(half, 0)],
-    A0: [pt(half - ramp, 0), pt(half, KILL)],
-  }
+  // los graves se cruzan de a poco mientras suena el fade: B los sube y A los baja en el mismo tramo.
+  // Pasa por −10 dB a mitad de camino para que no quede un hueco sin graves (en dB lineal quedarían los dos en −24).
+  const swap = (from: number, to: number) => ({
+    B0: [pt(from, KILL), pt((from + to) / 2, -10), pt(to, 0)],
+    A0: [pt(from, 0), pt((from + to) / 2, -10), pt(to, KILL)],
+  })
+  if (style === 'blend') return { ...empty, x: [pt(0, 0), pt(bars, 1)], ...swap(bars / 4, bars * 3 / 4) }
+  // cambio de graves: B entra sin graves, mientras los dos suenan al tope se pasan los graves, después se va A
+  return { ...empty, x: [pt(0, 0), pt(bars / 4, 0.5), pt(bars * 3 / 4, 0.5), pt(bars, 1)], ...swap(bars / 4, bars / 2) }
 }
 
 /** Valor de una curva en `at`. Sin puntos vale `empty`; antes del primero y después del último, se queda quieta. */
