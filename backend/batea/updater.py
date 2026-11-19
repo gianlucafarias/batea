@@ -49,8 +49,15 @@ def parse_version(v: str) -> tuple[int, ...] | None:
 
 
 # ------------------------------------------------------------------ ¿se puede instalar acá?
+def demo() -> bool:
+    """BATEA_UPDATE_DEMO=1: recorre todo el aviso con un avance simulado (para ver cómo se ve), sin descargar ni instalar nada."""
+    return os.environ.get("BATEA_UPDATE_DEMO") == "1"
+
+
 def can_install() -> tuple[bool, str | None]:
     """(sí/no, motivo). Desarrollo, app abierta desde el .dmg o carpeta sin permiso: se descarga a mano."""
+    if demo():
+        return True, None
     if not runtime.frozen():
         return False, "dev"
     if runtime.translocated():
@@ -169,11 +176,27 @@ def _worker(version: str, url: str) -> None:
         shutil.rmtree(cache, ignore_errors=True)
 
 
+def _demo_worker(version: str) -> None:
+    for state, message, seconds in (("downloading", "Descargando…", 4.0), ("verifying", "Comprobando que sea la app original…", 1.3), ("staging", "Preparando la actualización…", 1.3)):
+        steps = 20 if state == "downloading" else 1
+        for i in range(steps):
+            _set(state=state, progress=(i + 1) / steps if state == "downloading" else 1.0, message=message)
+            time.sleep(seconds / steps)
+    _set(state="ready", message="Actualización lista", progress=1.0)
+
+
 def start_install() -> dict:
     """Empieza a bajar e instalar la versión que anuncia GitHub. Un solo intento a la vez."""
     info = updates.check()
     if not info.get("update_available"):
         raise ValueError("Ya tenés la última versión")
+    if demo():
+        with _lock:
+            if _state["state"] in ("downloading", "verifying", "staging"):
+                return dict(_state)
+            _state.update(state="downloading", progress=0.0, message="Descargando…", version=info["latest"], error=None, manual=False)
+        threading.Thread(target=_demo_worker, args=(info["latest"],), daemon=True, name="updater-demo").start()
+        return snapshot()
     ok, why = can_install()
     url = info.get("download")
     if not ok or not url or not str(url).startswith(updates.ALLOWED_PREFIX):
@@ -217,6 +240,8 @@ def staged_app() -> Path | None:
 
 def restart(pid: int | None = None, app: Path | None = None, staged: Path | None = None, kill_self: bool = True) -> dict:
     """Cierra Batea y la reabre ya actualizada. El cambio lo hace un script aparte, cuando Batea ya no corre."""
+    if demo():
+        return {"restarting": True, "demo": True}               # en la demostración no se cierra nada
     app = app or runtime.bundle_root()
     staged = staged or staged_app()
     if app is None or staged is None or not staged.exists():

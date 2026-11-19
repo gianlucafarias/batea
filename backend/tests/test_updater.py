@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from batea import runtime, updater
+from batea import runtime, updater, updates
 
 
 def fake_app(root: Path, name: str, version: str, marker: str = "") -> Path:
@@ -44,6 +44,25 @@ class DownloadTests(unittest.TestCase):
         ok, why = updater.can_install()
         self.assertFalse(ok)
         self.assertEqual(why, "dev")
+
+
+class DemoTests(unittest.TestCase):
+    def test_la_demostracion_recorre_todos_los_estados_sin_tocar_nada(self):
+        info = {"update_available": True, "latest": "9.9.9", "current": "0.4.0", "download": None}
+        real_sleep = time.sleep
+        with mock.patch.dict(os.environ, {"BATEA_UPDATE_DEMO": "1"}), mock.patch.object(updates, "check", return_value=info), \
+                mock.patch.object(updater.time, "sleep", lambda s: None):
+            self.assertEqual(updater.can_install(), (True, None))
+            updater._set(state="idle")
+            first = updater.start_install()
+            self.assertIn(first["state"], ("downloading", "ready"))              # el hilo simulado corre sin esperas
+            for _ in range(200):
+                if updater.snapshot()["state"] == "ready":
+                    break
+                real_sleep(0.02)
+            self.assertEqual(updater.snapshot()["state"], "ready")
+            self.assertEqual(updater.restart(), {"restarting": True, "demo": True})
+            updater._set(state="idle", version=None, progress=0.0)
 
 
 class VerifyTests(unittest.TestCase):
