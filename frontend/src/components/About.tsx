@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useApp } from '../store'
+import { useUpdater } from '../lib/useUpdater'
 import { BrandMark } from './icons'
 
 const CHIP: Record<string, string> = { arm64: 'Apple Silicon', x86_64: 'Intel' }
@@ -12,7 +13,8 @@ function when(seconds: number | null | undefined): string | null {
 
 /** Pestaña de Ajustes: qué versión está corriendo y si hay otra más nueva. */
 export function AboutPanel() {
-  const { status, update, toast, setWelcome, setSettings } = useApp()
+  const { status, update, setWelcome, setSettings } = useApp()
+  const up = useUpdater()
   const [busy, setBusy] = useState(false)
   const [offline, setOffline] = useState(false)
   const [checked, setChecked] = useState(false)
@@ -71,10 +73,14 @@ export function AboutPanel() {
           <>
             <p className="about-line">Hay una versión nueva: <b className="num">{update.latest}</b>. Tenés la {update.current}.</p>
             {update.notes && <p className="muted" style={{ margin: 0, whiteSpace: 'pre-line', fontSize: 12.5, lineHeight: 1.5 }}>{update.notes}</p>}
-            <div>
-              <button className="btn primary sm" onClick={() => { void api.openUpdate().catch(() => toast('No pude abrir la descarga', 'error')) }}>
-                Descargar la {update.latest}
-              </button>
+            <div className="about-install">
+              {up.st.state === 'idle' && (update.can_install
+                ? <button className="btn primary sm" onClick={() => void up.install()}>Actualizar ahora</button>
+                : <button className="btn primary sm" onClick={up.manual}>Descargar la {update.latest}</button>)}
+              {up.st.state === 'downloading' && <><div className="uc-bar" style={{ flex: 1 }}><i style={{ width: `${Math.round(up.st.progress * 100)}%` }} /></div><span className="muted num">{Math.round(up.st.progress * 100)} %</span></>}
+              {(up.st.state === 'verifying' || up.st.state === 'staging') && <><div className="uc-bar indeterminate" style={{ flex: 1 }}><i /></div><span className="muted">Instalando…</span></>}
+              {up.st.state === 'ready' && <><span className="about-line" style={{ flex: 1 }}><b>Actualización lista.</b> Reiniciá para instalarla.</span><button className="btn primary sm" disabled={up.restarting} onClick={() => void up.restart()}>{up.restarting ? 'Reiniciando…' : 'Reiniciar ahora'}</button></>}
+              {up.st.state === 'error' && <><span className="about-line" style={{ flex: 1, color: 'var(--accent)' }}>{up.st.error}</span><button className="btn primary sm" onClick={up.manual}>Descargar a mano</button></>}
             </div>
             <p className="faint" style={{ margin: 0, fontSize: 12 }}>Tu librería y tus datos no se tocan al actualizar.</p>
           </>

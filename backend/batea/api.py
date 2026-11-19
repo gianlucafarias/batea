@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, analysis, anlz, config, cues, db, discover, export, features, folders, jobs, keyfill, links, rbsync, recommend, runtime, universe, updates
+from . import agents, analysis, anlz, config, cues, db, discover, export, features, folders, jobs, keyfill, links, rbsync, recommend, runtime, universe, updater, updates
 from .sources import registry
 from .sources.base import KINDS, LABELS
 from .api_helpers import (
@@ -45,9 +45,39 @@ async def _update_gate(request, call_next):
     return await call_next(request)
 
 
+@app.on_event("startup")
+def _resume_update() -> None:
+    updater.resume()
+
+
 @app.get("/api/update")
 def update_status(force: bool = False) -> dict:
-    return updates.check(force=force)
+    ok, why = updater.can_install()
+    return {**updates.check(force=force), "can_install": ok, "install_blocked": why}
+
+
+@app.get("/api/update/state")
+def update_state() -> dict:
+    """En qué está la actualización interna: idle · downloading · verifying · staging · ready · error."""
+    return updater.snapshot()
+
+
+@app.post("/api/update/install")
+def update_install() -> dict:
+    """Baja, verifica y prepara la versión nueva (no cambia nada hasta reiniciar)."""
+    try:
+        return updater.start_install()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/update/restart")
+def update_restart() -> dict:
+    """Cierra Batea y la reabre con la versión nueva ya instalada."""
+    try:
+        return updater.restart()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/api/update/open")

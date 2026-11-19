@@ -81,6 +81,19 @@ export interface UpdateInfo {
   online: boolean | null
   /** cuándo se leyó por última vez la información de GitHub (segundos desde 1970), si alguna vez */
   checked_at?: number | null
+  /** se puede bajar e instalar desde adentro (app empaquetada, en una carpeta con permiso) */
+  can_install?: boolean
+  install_blocked?: string | null
+}
+
+export interface UpdateState {
+  state: 'idle' | 'downloading' | 'verifying' | 'staging' | 'ready' | 'error'
+  progress: number
+  message: string
+  version: string | null
+  error: string | null
+  /** si falló o no se puede instalar solo: ofrecer la descarga a mano */
+  manual: boolean
 }
 
 export interface BuildInfo { version: string; arch: string; fingerprint: string; built_at: string | null }
@@ -181,6 +194,9 @@ interface SetupResult { jobs?: Job[]; sync?: Job; discover?: Job }
 export const api = {
   status: () => get<Status>('/api/status'),
   update: (force = false) => get<UpdateInfo>(`/api/update${force ? '?force=true' : ''}`),
+  updateState: () => get<UpdateState>('/api/update/state'),
+  updateInstall: () => post<UpdateState>('/api/update/install'),
+  updateRestart: () => post<{ restarting: boolean }>('/api/update/restart'),
   openUpdate: () => post<{ opened: string }>('/api/update/open'),
   jobs: () => get<Job[]>('/api/jobs'),
   welcomeDone: () => post('/api/welcome/done'),

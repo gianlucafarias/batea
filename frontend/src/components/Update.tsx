@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { api, type UpdateInfo } from '../api'
+import { useUpdater } from '../lib/useUpdater'
 import { BrandMark } from './icons'
 
 /** Pantalla que reemplaza a la app cuando esta versión quedó por debajo de la mínima publicada en GitHub. */
 export function UpdateScreen({ info }: { info: UpdateInfo }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const up = useUpdater()
 
   const recheck = async () => {
     setBusy(true); setMsg(null)
@@ -29,11 +31,18 @@ export function UpdateScreen({ info }: { info: UpdateInfo }) {
         </p>
         {info.notes && <p className="splash-sub" style={{ whiteSpace: 'pre-line' }}>{info.notes}</p>}
         <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
-          <button className="btn primary" onClick={() => { void api.openUpdate().catch(() => setMsg('No pude abrir la descarga.')) }}>
-            Descargar la versión {info.latest ?? info.min_version}
-          </button>
+          {up.st.state === 'ready'
+            ? <button className="btn primary" disabled={up.restarting} onClick={() => void up.restart()}>{up.restarting ? 'Reiniciando…' : 'Reiniciar ahora'}</button>
+            : up.busy
+              ? <button className="btn primary" disabled>{up.st.state === 'downloading' ? `Descargando… ${Math.round(up.st.progress * 100)} %` : 'Instalando…'}</button>
+              : info.can_install && up.st.state !== 'error'
+                ? <button className="btn primary" onClick={() => void up.install()}>Actualizar ahora</button>
+                : <button className="btn primary" onClick={() => { void api.openUpdate().catch(() => setMsg('No pude abrir la descarga.')) }}>
+                  Descargar la versión {info.latest ?? info.min_version}
+                </button>}
           <button className="btn ghost" disabled={busy} onClick={recheck}>Ya la instalé</button>
         </div>
+        {up.st.state === 'error' && <p className="splash-sub" style={{ marginTop: 12 }}>{up.st.error}</p>}
         {msg && <p className="splash-sub" style={{ marginTop: 12 }}>{msg}</p>}
       </div>
     </div>

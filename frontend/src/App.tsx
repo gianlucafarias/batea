@@ -10,6 +10,7 @@ import { Tagger } from './components/Tagger'
 import { UniverseEditor } from './components/Universe'
 import { ExportDialog, Player, PromptModal, Toasts } from './components/Overlays'
 import { CueEditor } from './components/CueEditor'
+import { UpdateCard } from './components/UpdateCard'
 import { PopMenu } from './components/ContextMenu'
 import { EditTrackDialog, TrackMenu } from './components/TrackMenu'
 import { Sidebar } from './components/Sidebar'
@@ -154,6 +155,7 @@ export default function App() {
       <TrackMenu />
       <PopMenu />
       <CueEditor />
+      <UpdateCard />
       <EditTrackDialog />
       <Toasts />
       {dragging && <div className="drop-ov"><div><h2>Soltá para traer a Batea</h2><div className="muted">Temas sueltos o carpetas enteras. Batea reconoce los temas que ya están en la librería.</div></div></div>}

@@ -225,11 +225,6 @@ export function Sidebar() {
           <button className="btn sm" onClick={() => setSettings('programs')} title="Programas de DJ y agentes de IA"><IconSettings size={14} /> Ajustes</button>
           <button className="btn sm" onClick={() => setExportOpen(true)} title="Exportar cajas a rekordbox, Traktor, Serato o M3U"><IconExport size={14} /> Exportar</button>
         </div>
-        {update?.update_available && (
-          <button className="btn sm ghost" onClick={() => { void api.openUpdate().catch(() => {}) }} title={update.notes || 'Abrir la descarga'}>
-            Hay una versión nueva ({update.latest}) · Descargar
-          </button>
-        )}
       </div>
     </aside>
   )
