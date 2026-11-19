@@ -7,7 +7,7 @@ import { energyColor, KeyBadge, Sleeve, Stars } from './bits'
 import { groupTags } from './FilterBar'
 import { IconCheck, IconPause, IconPlay, IconX } from './icons'
 import { GlyphSwap, useFluidHover } from '../lib/fluidHover'
-import { loadWaveform, useWaveform, Waveform } from './Waveform'
+import { LiveWaveform, loadWaveform, useWaveform } from './Waveform'
 
 const CAT_ORDER = ['momento', 'vibra', 'voz', 'versión', 'estructura']
 
@@ -208,8 +208,7 @@ export function Tagger() {
                   <GlyphSwap on={isCur && playing} a={<IconPlay size={15} />} b={<IconPause size={15} />} />
                 </button>
                 <div className="wave" style={{ flex: 1, height: 72 }}>
-                  <Waveform data={wave} progress={isCur && duration ? time / duration : 0} introBars={t.intro_bars} outroBars={t.outro_bars}
-                    onSeek={(f) => { if (isCur) seek(f * duration); else if (t.online) playFrom(t, f * (t.duration ?? 0)) }} />
+                  <LiveWaveform track={t} data={wave} introBars={t.intro_bars} outroBars={t.outro_bars} />
                 </div>
               </div>
               {!t.online && <div className="faint" style={{ fontSize: 11.5 }}>Sin audio: el archivo está en un disco desconectado. Podés etiquetar igual mirando la waveform.</div>}

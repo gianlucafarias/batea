@@ -3,6 +3,7 @@ import { api, isNotFound, type LibrarySource, type LiveApp, type LiveSettings, t
 import { crateSource, isActiveJob, isQueuedJob, legacyRekordbox, pickSourcePath, sourceName, syncJobSource, syncSource } from '../sources'
 import { useApp } from '../store'
 import type { Job } from '../types'
+import { CuesSection } from './CuesSection'
 import { IconPlus, IconSync } from './icons'
 
 const DISMISSED_KEY = 'batea.sources.dismissed'
@@ -330,6 +331,7 @@ export function SourcesPanel() {
         </button>
       </div>
       <LiveSection />
+      {enabled.some((source) => source.kind === 'rekordbox') && <CuesSection />}
       {!legacy && (
         <div className="sources-add source-row">
           <button className="btn sm ghost" aria-expanded={adding} onClick={() => setAdding(!adding)}><IconPlus size={13} /> Agregar otro programa…</button>

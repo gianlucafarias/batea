@@ -75,6 +75,15 @@ CREATE TABLE IF NOT EXISTS relations (
 CREATE INDEX IF NOT EXISTS idx_rel_a ON relations(a);
 CREATE INDEX IF NOT EXISTS idx_rel_b ON relations(b);
 
+-- La mezcla armada en "Probar mezcla" (entrada, cue, fase, curvas): una por par dirigido, A sale y B entra
+CREATE TABLE IF NOT EXISTS mix_settings (
+    a INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    b INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    data TEXT NOT NULL,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (a, b)
+);
+
 -- kind: folder | playlist | smart_rb | session_folder | session | user | smart
 CREATE TABLE IF NOT EXISTS crates (
     id INTEGER PRIMARY KEY,
@@ -96,6 +105,83 @@ CREATE TABLE IF NOT EXISTS crate_tracks (
     PRIMARY KEY (crate_id, track_id)
 );
 CREATE INDEX IF NOT EXISTS idx_crate_tracks_track ON crate_tracks(track_id);
+
+-- Orden elegido en Batea para playlists importadas (rekordbox, Traktor…). Aparte de crate_tracks porque
+-- cada sincronización reescribe esa tabla; acá el orden del DJ sobrevive y no se escribe nada en el programa.
+CREATE TABLE IF NOT EXISTS crate_order (
+    crate_id INTEGER NOT NULL REFERENCES crates(id) ON DELETE CASCADE,
+    track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (crate_id, track_id)
+);
+
+-- Qué se exportó y cómo era la caja en ese momento: así se marcan las que quedaron sin exportar o cambiaron después
+CREATE TABLE IF NOT EXISTS crate_exports (
+    crate_id INTEGER NOT NULL REFERENCES crates(id) ON DELETE CASCADE,
+    target TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    exported_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (crate_id, target)
+);
+
+-- Qué cajas forman parte del archivo de cada destino. rekordbox lee UN solo XML: cada exportación lo reescribe
+-- entero, así que para no perder lo exportado antes se vuelve a escribir todo el conjunto.
+-- crate_id es texto: también entran atajos como "recent" o "top", que no son filas de crates.
+CREATE TABLE IF NOT EXISTS export_selection (
+    target TEXT NOT NULL,
+    crate_id TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (target, crate_id)
+);
+
+-- Cues: espejo de solo lectura de las de rekordbox, y las que el DJ edita en Batea (ver cues.py)
+CREATE TABLE IF NOT EXISTS rb_cues (
+    id INTEGER PRIMARY KEY,
+    track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    kind INTEGER NOT NULL,                -- djmdCue.Kind: 0 memory cue, 1.. hot cue
+    in_ms REAL NOT NULL,
+    out_ms REAL,
+    comment TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rb_cues_track ON rb_cues(track_id);
+CREATE TABLE IF NOT EXISTS user_cues (
+    id INTEGER PRIMARY KEY,
+    track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,                   -- memory | hot | loop
+    slot INTEGER,                         -- 0..7 = pad A..H
+    start_ms REAL NOT NULL,
+    end_ms REAL,
+    name TEXT,
+    color TEXT                            -- "r,g,b" (si no, el de rekordbox por defecto)
+);
+CREATE INDEX IF NOT EXISTS idx_user_cues_track ON user_cues(track_id);
+CREATE TABLE IF NOT EXISTS cue_overrides (
+    track_id INTEGER PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE
+);
+
+-- Grilla corregida a mano en Batea: tempo fijo (Inizio = segundos de un beat, Battito = qué beat del compás es ese)
+CREATE TABLE IF NOT EXISTS user_grids (
+    track_id INTEGER PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE,
+    inizio REAL NOT NULL,
+    bpm REAL NOT NULL,
+    battito INTEGER NOT NULL DEFAULT 1
+);
+-- Lo que rekordbox escribió en su XML para cada tema (crudo: se devuelve tal cual, sin reinterpretar)
+CREATE TABLE IF NOT EXISTS rb_xml_tracks (
+    track_id INTEGER PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS rb_xml_tempo (
+    track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    idx INTEGER NOT NULL,
+    inizio TEXT, bpm TEXT, metro TEXT, battito TEXT,
+    PRIMARY KEY (track_id, idx)
+);
+CREATE TABLE IF NOT EXISTS rb_xml_marks (
+    track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    idx INTEGER NOT NULL,
+    name TEXT, type TEXT, start TEXT, end TEXT, num TEXT, red TEXT, green TEXT, blue TEXT,
+    PRIMARY KEY (track_id, idx)
+);
 
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
@@ -131,6 +217,8 @@ MIGRATIONS = [
     ("tags", "hotkey", "TEXT"),
     ("tracks", "meta_user", "INTEGER"),    # 1 = título/artista/etc. editados a mano: el análisis no los pisa
     ("crates", "source", "TEXT"),          # user | rekordbox | traktor | serato…
+    ("user_cues", "color", "TEXT"),        # "r,g,b" de la cue
+    ("crates", "home_position", "INTEGER"),  # orden elegido en la pantalla de Bateas (la sincronización no lo toca)
 ]
 
 DEFAULT_HOTKEYS = {

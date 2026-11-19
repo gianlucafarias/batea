@@ -16,6 +16,17 @@ import { Wall } from './Wall'
 
 type Mode = 'dig' | 'wall' | 'list'
 
+const SORT_KEYS: SortKey[] = ['position', 'title', 'artist', 'bpm', 'key', 'energy', 'rating', 'date_added', 'intro_bars', 'play_count', 'duration']
+
+/** El orden elegido se recuerda entre cajas y entre sesiones. */
+function loadSort(): [SortKey, 1 | -1] {
+  try {
+    const raw = JSON.parse(localStorage.getItem('batea.sort') ?? 'null')
+    if (Array.isArray(raw) && SORT_KEYS.includes(raw[0]) && (raw[1] === 1 || raw[1] === -1)) return [raw[0], raw[1]]
+  } catch { /* sin storage o valor roto */ }
+  return ['position', 1]
+}
+
 function loadMode(): Mode {
   try { return (localStorage.getItem('batea.mode') as Mode) || 'dig' } catch { return 'dig' }
 }
@@ -32,7 +43,11 @@ export function CrateView() {
   const [mode, setMode] = useState<Mode>(loadMode)
   const [filters, setFilters] = useState<Filters>({})
   const [tracks, setTracks] = useState<Track[] | null>(null)
-  const [sort, setSort] = useState<[SortKey, 1 | -1]>(['position', 1])
+  const [sort, setSortState] = useState<[SortKey, 1 | -1]>(loadSort)
+  const setSort = useCallback((s: [SortKey, 1 | -1]) => {
+    setSortState(s)
+    try { localStorage.setItem('batea.sort', JSON.stringify(s)) } catch { /* sin storage */ }
+  }, [])
 
   const [multi, setMulti] = useState<Set<number>>(new Set())
   const anchor = useRef<number | null>(null)
@@ -43,7 +58,7 @@ export function CrateView() {
   useEffect(() => { useApp.setState({ viewFilters: filters }) }, [filters])
   useEffect(() => {
     setFilters(filterPreset && filterPreset.crateId === crateId ? filterPreset.filters : {})
-    setSort(['position', 1]); setMulti(new Set())
+    setMulti(new Set())
   }, [crateId, filterPreset?.seq]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { try { localStorage.setItem('batea.mode', mode) } catch { /* sin storage */ } }, [mode])
   useEffect(() => {
@@ -109,6 +124,16 @@ export function CrateView() {
     return () => window.removeEventListener('keydown', onKey)
   }, [sorted, mode])
 
+  // Reordenar a mano: en tus cajas y en playlists importadas, con el orden de la caja y sin filtros que escondan temas
+  const reorderable = (crate?.kind === 'user' || crate?.kind === 'playlist') && sort[0] === 'position' && sort[1] === 1
+  const reorder = useCallback((ids: number[]) => {
+    if (!crate) return
+    const before = tracks
+    const byId = new Map((tracks ?? []).map((t) => [t.id, t]))
+    setTracks(ids.map((id) => byId.get(id)).filter((t): t is Track => !!t))
+    api.reorderCrate(Number(crate.id), ids).catch((e) => { setTracks(before); toast((e as Error).message, 'error') })
+  }, [crate, tracks, toast])
+
   const selected = useMemo(() => (multi.size ? sorted.filter((t) => multi.has(t.id)) : []), [sorted, multi])
 
   if (!crate) return <div className="empty"><h3>Caja no encontrada</h3></div>
@@ -168,6 +193,8 @@ export function CrateView() {
       <div className="toolbar">
         <FilterBar filters={filters} onChange={setFilters} onSaveSmart={saveSmart} counts={tagCounts} />
         <div className="grow" />
+        {(crate.kind === 'user' || crate.kind === 'playlist') && mode === 'list' && (sort[0] !== 'position' || sort[1] !== 1) &&
+          <button className="btn ghost sm" onClick={() => setSort(['position', 1])} title="Para arrastrar los temas y ordenarlos a mano">Orden de la caja</button>}
         <button className="btn sm" disabled={!sorted.length} onClick={() => openTagger(sorted, crate.name)} title="Etiquetar estos temas con el teclado"><IconTag size={13} /> Etiquetar en tanda</button>
         <Seg role="tablist">
           <button className={mode === 'dig' ? 'on' : ''} onClick={() => setMode('dig')} title="Hojear como en una batea" aria-label="Hojear como en una batea"><IconCrate size={14} /></button>
@@ -178,7 +205,7 @@ export function CrateView() {
       {tracks === null ? <div className="empty">Cargando discos…</div> :
         mode === 'dig' ? <Digger key={`${crateId}|${JSON.stringify(filters)}|${sort.join()}`} tracks={sorted} crateName={crate.name} /> :
         mode === 'wall' ? <Wall tracks={sorted} multi={multi} onPick={pick} /> :
-        <ListView tracks={sorted} sort={sort} onSort={setSort} multi={multi} onPick={pick} />}
+        <ListView tracks={sorted} sort={sort} onSort={setSort} multi={multi} onPick={pick} onReorder={reorderable ? reorder : undefined} />}
       {selected.length > 0 && mode !== 'dig' && <BatchBar tracks={selected} onClear={() => setMulti(new Set())} />}
     </div>
   )

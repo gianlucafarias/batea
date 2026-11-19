@@ -1,6 +1,8 @@
 import { dbToPos, evaluate, isEq, lanesOf, type Automation, type LaneGroup, type LaneId } from './automation'
 import { barAt, beatAt, type Deck, type Timing, type Transition } from './model'
 import type { Peaks } from './peaks'
+import type { CueDto } from '../../api'
+import { cueColor, cueLabel, rgba } from '../../lib/cues'
 
 export const RULER = 24
 const AUTOMATION_LANE = 66
@@ -38,6 +40,9 @@ interface Drawing {
   active: { lane: LaneId; index: number } | null
   peaksA: Peaks | null
   peaksB: Peaks | null
+  cuesA: CueDto[]
+  cuesB: CueDto[]
+  showCues: boolean
 }
 
 function waveform(
@@ -118,6 +123,34 @@ function grid(
   }
 }
 
+/** Cues de un tema sobre su franja. `at` pasa el tiempo del tema al de la línea de tiempo; solo se dibujan las que suenan en la mezcla. */
+function cues(
+  ctx: CanvasRenderingContext2D, list: CueDto[], width: number, xAt: (t: number) => number, at: (s: number) => number,
+  from: number, until: number, top: number, bottom: number, labelY: number,
+) {
+  ctx.font = '700 10px "JetBrains Mono Variable", monospace'
+  ctx.textAlign = 'left'
+  for (const q of list) {
+    const t = at(q.start_ms / 1000)
+    if (t < from - 1e-3 || t > until) continue
+    const x = xAt(t)
+    if (x < -40 || x > width + 40) continue
+    const c = cueColor(q)
+    if (q.end_ms != null) {
+      const x2 = xAt(at(q.end_ms / 1000))
+      ctx.fillStyle = rgba(c, 0.2)
+      ctx.fillRect(x, top, Math.max(2, x2 - x), bottom - top)
+    }
+    ctx.fillStyle = rgba(c, 0.9)
+    ctx.fillRect(Math.round(x), top, 2, bottom - top)
+    const label = cueLabel(q)
+    const w = ctx.measureText(label).width + 8
+    ctx.fillRect(Math.round(x), labelY, w, 13)
+    ctx.fillStyle = '#0e0d0c'
+    ctx.fillText(label, Math.round(x) + 4, labelY + 10)
+  }
+}
+
 export function drawTimeline(
   ctx: CanvasRenderingContext2D, width: number, height: number, left: number, span: number, d: Drawing,
 ): number {
@@ -147,6 +180,11 @@ export function drawTimeline(
   ctx.font = '10px "JetBrains Mono Variable", monospace'
   grid(ctx, A, width, left, dt, 0, RULER, aBottom, false, tx)
   grid(ctx, B, width, (left - bOrigin) * rate, dt * rate, barAt(B.db, bStart), bTop, height, true, tx)
+
+  if (d.showCues) {
+    cues(ctx, d.cuesA, width, xAt, (v) => v, 0, durA, RULER, aBottom, RULER + 2)
+    cues(ctx, d.cuesB, width, xAt, (v) => bOrigin + v / rate, cueT, endB, bTop, height, height - 15)
+  }
 
   ctx.fillStyle = '#ff7a458c'
   ctx.fillRect(Math.round(tx), RULER, 1, bTop - RULER)

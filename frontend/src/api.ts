@@ -25,6 +25,12 @@ export interface ExportTarget {
 }
 export interface ExportResult {
   ok: boolean; target: ExportTargetId; path: string; files: string[]; tracks: number; missing: number; warnings: string[]
+  /** cajas exportadas antes que se volvieron a escribir en el mismo archivo (rekordbox) */
+  kept?: number
+  /** con cues: temas que llevaron cues y cuántas no se pudieron llevar */
+  cue_tracks?: number
+  /** temas de rekordbox sin grilla exacta (todavía no se trajo su XML) */
+  grid_missing?: number
 }
 
 export function isNotFound(error: unknown): boolean {
@@ -50,6 +56,7 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
 
 const get = <T,>(u: string) => req<T>('GET', u)
 const post = <T,>(u: string, b?: unknown) => req<T>('POST', u, b ?? {})
+const put = <T,>(u: string, b: unknown) => req<T>('PUT', u, b)
 const patch = <T,>(u: string, b: unknown) => req<T>('PATCH', u, b)
 const del = <T,>(u: string) => req<T>('DELETE', u)
 
@@ -72,9 +79,41 @@ export interface UpdateInfo {
   page: string
   download: string | null
   online: boolean | null
+  /** cuándo se leyó por última vez la información de GitHub (segundos desde 1970), si alguna vez */
+  checked_at?: number | null
+}
+
+export interface BuildInfo { version: string; arch: string; fingerprint: string; built_at: string | null }
+
+export interface CueDto {
+  kind: 'memory' | 'hot' | 'loop'
+  slot: number | null              // 0..7 = pad A..H
+  start_ms: number
+  end_ms: number | null
+  name: string | null
+  rgb: [number, number, number] | null
+}
+export interface CuesInfo {
+  source: 'batea' | 'rekordbox-xml' | 'rekordbox' | 'none'
+  cues: CueDto[]
+  has_rekordbox: boolean
+  from_rekordbox: boolean
+  /** primer tramo de la grilla de rekordbox (o la de su archivo de análisis) */
+  grid: { inizio: string; bpm: string; metro: string; battito: string }[]
+  user_grid: { inizio: number; bpm: number; battito: number } | null
+}
+
+export interface CuesStatus {
+  xml: { product: string | null; tracks: number; with_grid: number; with_cues: number; cues: number; path: string } | null
+  mirror: { cues: number; tracks: number }
+}
+export interface CuesImport {
+  product: string | null; tracks: number; with_grid: number; with_cues: number; not_found: number; cues: number
+  mapping: { compared: number; unexpected: Record<string, number>; ok: boolean }
 }
 
 export interface Status {
+  version?: BuildInfo
   tracks: number
   library_tracks: number
   universe: { id: number; name: string } | null
@@ -170,7 +209,10 @@ export const api = {
   previews: () => get<Record<string, [number, string | null, string | null, string | null, number | null, number][]>>('/api/crates/previews'),
   createCrate: (name: string, opts: { query?: Filters; track_ids?: number[]; parent_id?: number } = {}) =>
     post<{ id: number }>('/api/crates', { name, ...opts }),
-  patchCrate: (id: number | string, b: { name?: string; hidden?: boolean; query?: Filters }) => patch(`/api/crates/${id}`, b),
+  createFolder: (name: string) => post<{ id: number }>('/api/crates', { name, kind: 'folder' }),
+  patchCrate: (id: number | string, b: { name?: string; hidden?: boolean; query?: Filters; parent_id?: number | null }) => patch(`/api/crates/${id}`, b),
+  duplicateCrate: (id: number | string) => post<{ id: number }>(`/api/crates/${id}/duplicate`),
+  orderCrates: (ids: number[]) => put('/api/crate-order', { ids }),
   deleteCrate: (id: number | string) => del(`/api/crates/${id}`),
   addToCrate: (id: number | string, track_ids: number[]) => post(`/api/crates/${id}/tracks`, { track_ids }),
   removeFromCrate: (id: number | string, tid: number) => del(`/api/crates/${id}/tracks/${tid}`),
@@ -199,6 +241,9 @@ export const api = {
 
   relate: (a: number, b: number, kind: string, note?: string) => post('/api/relations', { a, b, kind, note }),
   unrelate: (id: number) => del(`/api/relations/${id}`),
+  mixSettings: (a: number, b: number) => get<{ saved: Record<string, unknown> | null }>(`/api/mixes/${a}/${b}`),
+  saveMixSettings: (a: number, b: number, settings: Record<string, unknown>) => put(`/api/mixes/${a}/${b}`, { settings }),
+  reorderCrate: (id: number, trackIds: number[]) => put(`/api/crates/${id}/order`, { track_ids: trackIds }),
   feedback: (seed: number, other: number, good: boolean) => post('/api/feedback', { seed, other, good }),
 
   map: (crate?: string | number | null) =>
@@ -227,8 +272,16 @@ export const api = {
   exportRb: (crate_ids: (number | string)[], tags_in_comment: boolean) =>
     post<{ path: string; tracks: number; playlists: number }>('/api/export/rekordbox', { crate_ids, tags_in_comment }),
   exportTargets: () => get<{ targets: ExportTarget[] }>('/api/export/targets'),
-  exportTo: (target: ExportTargetId, crate_ids: (number | string)[], tags_in_comment: boolean) =>
-    post<ExportResult>('/api/export', { target, crate_ids, tags_in_comment }),
+  exportTo: (target: ExportTargetId, crate_ids: (number | string)[], tags_in_comment: boolean, keep_previous = true, with_cues = false) =>
+    post<ExportResult>('/api/export', { target, crate_ids, tags_in_comment, keep_previous, with_cues }),
+  cues: (id: number) => get<CuesInfo>(`/api/tracks/${id}/cues`),
+  saveCues: (id: number, cues: CueDto[]) => put(`/api/tracks/${id}/cues`, { cues }),
+  saveGrid: (id: number, g: { inizio: number; bpm: number; battito: number }) => put(`/api/tracks/${id}/grid`, g),
+  resetGrid: (id: number) => del(`/api/tracks/${id}/grid`),
+  resetCues: (id: number) => del(`/api/tracks/${id}/cues`),
+  refreshCues: () => post('/api/cues/refresh'),
+  cuesStatus: () => get<CuesStatus>('/api/cues/status'),
+  importCuesXml: (path: string) => post<CuesImport>('/api/cues/import-xml', { path }),
   revealExport: (path?: string) => post('/api/reveal-export', path ? { path } : undefined),
 }
 

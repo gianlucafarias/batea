@@ -4,7 +4,7 @@ import { AnalysisBadge } from './Analysis'
 import { SourceBadges } from './SourceBadges'
 import { openTrackMenu } from './TrackMenu'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApp, usePlayer } from '../store'
 import type { Track } from '../types'
 import { cleanTitle, fmtBpm, fmtDate, fmtTime } from '../util'
@@ -40,7 +40,10 @@ export function sortTracks(tracks: Track[], key: SortKey, dir: 1 | -1): Track[] 
 /** Devuelve true si el click fue de selección múltiple (⌘ / ⇧) y no debe abrir la ficha. */
 export type PickFn = (t: Track, index: number, e: React.MouseEvent) => boolean
 
-export function ListView({ tracks, sort, onSort, multi, onPick }: { tracks: Track[]; sort: [SortKey, 1 | -1]; onSort: (s: [SortKey, 1 | -1]) => void; multi?: Set<number>; onPick?: PickFn }) {
+const ROW = 40
+
+/** `onReorder` activa el arrastre para reordenar: recibe los ids de los temas en el orden nuevo. */
+export function ListView({ tracks, sort, onSort, multi, onPick, onReorder }: { tracks: Track[]; sort: [SortKey, 1 | -1]; onSort: (s: [SortKey, 1 | -1]) => void; multi?: Set<number>; onPick?: PickFn; onReorder?: (ids: number[]) => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const { selectedId, select, tags } = useApp()
   const { patchTrack, toast } = useApp()
@@ -51,7 +54,82 @@ export function ListView({ tracks, sort, onSort, multi, onPick }: { tracks: Trac
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags])
   const { play, track, playing } = usePlayer()
   const rowHover = useFluidHover<HTMLDivElement>()
-  const v = useVirtualizer({ count: tracks.length, getScrollElement: () => ref.current, estimateSize: () => 40, overscan: 12 })
+  const v = useVirtualizer({ count: tracks.length, getScrollElement: () => ref.current, estimateSize: () => ROW, overscan: 12 })
+
+  // ---- reordenar arrastrando (solo en cajas propias y con el orden de la caja)
+  const body = useRef<HTMLDivElement | null>(null)
+  const setHover = rowHover.ref
+  const bodyRef = useCallback((el: HTMLDivElement | null) => { body.current = el; setHover(el) }, [setHover])
+  const [drag, setDrag] = useState<{ ids: Set<number>; slot: number } | null>(null)
+  const swallow = useRef(false)
+  const live = useRef({ tracks, multi, onReorder })
+  live.current = { tracks, multi, onReorder }
+
+  const startDrag = useCallback((e: React.PointerEvent, t: Track) => {
+    const { onReorder: reorder } = live.current
+    if (!reorder || e.button !== 0 || (e.target as HTMLElement).closest('button:not(.artist-link), input, a, [role="slider"]')) return
+    const x0 = e.clientX, y0 = e.clientY
+    let started = false
+    let y = y0
+    let raf = 0
+    const slotAt = (clientY: number) => {
+      const top = body.current?.getBoundingClientRect().top ?? 0
+      return Math.max(0, Math.min(live.current.tracks.length, Math.round((clientY - top) / ROW)))
+    }
+    const scroller = ref.current
+    // junto a los bordes de la lista, se desplaza sola para llegar a filas lejanas
+    const autoscroll = () => {
+      if (!scroller) return
+      const r = scroller.getBoundingClientRect()
+      const edge = 56, headH = 32
+      const dy = y < r.top + headH + edge ? -Math.ceil((r.top + headH + edge - y) / 4) : y > r.bottom - edge ? Math.ceil((y - (r.bottom - edge)) / 4) : 0
+      if (dy) { scroller.scrollTop += dy; setDrag((d) => d && { ...d, slot: slotAt(y) }) }
+      raf = requestAnimationFrame(autoscroll)
+    }
+    const move = (ev: PointerEvent) => {
+      y = ev.clientY
+      if (!started) {
+        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return
+        started = true
+        const sel = live.current.multi
+        const ids = sel && sel.size > 1 && sel.has(t.id) ? new Set(sel) : new Set([t.id])
+        setDrag({ ids, slot: slotAt(y) })
+        raf = requestAnimationFrame(autoscroll)
+        document.body.classList.add('reordering')
+      }
+      setDrag((d) => d && { ...d, slot: slotAt(y) })
+    }
+    const finish = (ev: PointerEvent | null) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('keydown', key, true)
+      cancelAnimationFrame(raf)
+      document.body.classList.remove('reordering')
+      if (!started) return
+      swallow.current = true                     // el click que sigue al soltar no debe abrir la ficha
+      setTimeout(() => { swallow.current = false }, 0)
+      setDrag((d) => {
+        if (d && ev) {
+          const all = live.current.tracks
+          const moving = all.filter((x) => d.ids.has(x.id))
+          const rest = all.filter((x) => !d.ids.has(x.id))
+          const before = all.slice(0, d.slot).filter((x) => !d.ids.has(x.id)).length
+          const next = [...rest.slice(0, before), ...moving, ...rest.slice(before)].map((x) => x.id)
+          if (next.some((id, i) => id !== all[i].id)) live.current.onReorder?.(next)
+        }
+        return null
+      })
+    }
+    const up = (ev: PointerEvent) => finish(ev)
+    const cancel = () => finish(null)
+    const key = (ev: KeyboardEvent) => { if (ev.key === 'Escape') { ev.stopPropagation(); finish(null) } }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    window.addEventListener('keydown', key, true)
+  }, [])
+  useEffect(() => () => document.body.classList.remove('reordering'), [])
 
   return (
     <div className="list" ref={ref}>
@@ -63,8 +141,9 @@ export function ListView({ tracks, sort, onSort, multi, onPick }: { tracks: Trac
         ))}
       </div>
       {!tracks.length && <div className="empty"><h3>Sin resultados</h3></div>}
-      <div style={{ height: v.getTotalSize(), position: 'relative' }} ref={rowHover.ref}>
+      <div style={{ height: v.getTotalSize(), position: 'relative' }} ref={bodyRef}>
         {rowHover.highlight}
+        {drag && <div className="drop-line" style={{ top: drag.slot * ROW - 1 }} />}
         {v.getVirtualItems().map((row) => {
           const t = tracks[row.index]
           const isCur = track?.id === t.id
@@ -72,8 +151,10 @@ export function ListView({ tracks, sort, onSort, multi, onPick }: { tracks: Trac
             <div
               key={t.id}
               data-fh
-              className={`lrow${selectedId === t.id ? ' sel' : ''}${multi?.has(t.id) ? ' msel' : ''}${t.online ? '' : ' offline'}${t.unanalyzed ? ' unan' : ''}`}
+              className={`lrow${onReorder ? ' sortable' : ''}${drag?.ids.has(t.id) ? ' dragging' : ''}${selectedId === t.id ? ' sel' : ''}${multi?.has(t.id) ? ' msel' : ''}${t.online ? '' : ' offline'}${t.unanalyzed ? ' unan' : ''}`}
               style={{ position: 'absolute', top: row.start, left: 0, right: 0 }}
+              onPointerDown={(e) => startDrag(e, t)}
+              onClickCapture={(e) => { if (swallow.current) { e.stopPropagation(); e.preventDefault() } }}
               onClick={(e) => { if (!onPick?.(t, row.index, e)) select(t.id) }}
               onDoubleClick={() => play(t)}
               onContextMenu={(e) => openTrackMenu(e, t, tracks, multi)}

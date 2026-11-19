@@ -1,11 +1,17 @@
 #!/bin/zsh
 # Compila Batea y crea ~/Applications/Batea.app (un lanzador que abre la ventana nativa).
 # Uso: ./scripts/make_app.sh
+#
+# Para PROBAR cambios sin armar un instalador:  APP_NAME="Batea Pruebas" ./scripts/make_app.sh
+# Crea un lanzador aparte (no pisa la Batea instalada) que corre el código de esta carpeta. Se crea una sola vez:
+# después, cada cambio en el código llega con `npm run build` (interfaz) o cerrando y abriendo la app (motor).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="$(cat "$ROOT/VERSION")"
-APP="$HOME/Applications/Batea.app"
+APP_NAME="${APP_NAME:-Batea}"
+APP="$HOME/Applications/$APP_NAME.app"
+DEV=0; [[ "$APP_NAME" != "Batea" ]] && DEV=1
 UV="$(command -v uv || echo /opt/homebrew/bin/uv)"
 
 echo "→ Dependencias de Python"
@@ -32,9 +38,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Batea</string>
-  <key>CFBundleDisplayName</key><string>Batea</string>
-  <key>CFBundleIdentifier</key><string>app.batea.local</string>
+  <key>CFBundleName</key><string>$APP_NAME</string>
+  <key>CFBundleDisplayName</key><string>$APP_NAME</string>
+  <key>CFBundleIdentifier</key><string>app.batea.$([[ $DEV == 1 ]] && echo dev || echo local)</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleExecutable</key><string>Batea</string>
@@ -56,6 +62,11 @@ chmod +x "$APP/Contents/MacOS/Batea"
 
 # Links batea:// (desde Claude, Codex, T3…): un applet chiquito, sin ícono en el Dock, recibe el link
 # de macOS y se lo pasa a `python -m batea.links`, que lo manda a la Batea abierta (o la abre).
+if [[ $DEV == 1 ]]; then
+  echo "✓ Listo: abrí «$APP_NAME» desde ~/Applications, Launchpad o Spotlight (cerrá antes la Batea instalada)."
+  echo "  Corre el código de $ROOT y usa tu misma librería. Registro: ~/Library/Logs/Batea.log"
+  exit 0
+fi
 echo "→ Links batea://"
 LINKS="$APP/Contents/Helpers/Batea Links.app"
 mkdir -p "$APP/Contents/Helpers"

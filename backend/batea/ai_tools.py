@@ -210,8 +210,9 @@ def _rows(c: sqlite3.Connection, crate: str | None, filters: dict, scope: Scope 
         if crate and crate.isdigit():
             kind = c.execute("SELECT kind FROM crates WHERE id=?", (int(crate),)).fetchone()
             if kind and kind["kind"] in ("playlist", "session", "user"):
-                join = f"LEFT JOIN crate_tracks cp ON cp.track_id=t.id AND cp.crate_id={int(crate)}"
-                order = "cp.position, t.id"
+                join = (f"LEFT JOIN crate_tracks cp ON cp.track_id=t.id AND cp.crate_id={int(crate)} "
+                        f"LEFT JOIN crate_order co ON co.track_id=t.id AND co.crate_id={int(crate)}")
+                order = "co.position IS NULL, co.position, cp.position, t.id"
         elif crate and crate.startswith("dir:"):
             order = "t.path"
     w = (" WHERE " + " AND ".join(where)) if where else ""

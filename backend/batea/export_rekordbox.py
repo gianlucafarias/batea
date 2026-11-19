@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from . import config, keys
+from . import config, cues as cuesmod, keys
 
 _CLASSICAL_MINOR = ["G#m", "D#m", "A#m", "Fm", "Cm", "Gm", "Dm", "Am", "Em", "Bm", "F#m", "C#m"]
 _CLASSICAL_MAJOR = ["B", "F#", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E"]
@@ -32,7 +32,7 @@ def _location(path: str) -> str:
 
 
 def export(c: sqlite3.Connection, crate_ids: list[int], tags_in_comment: bool, out_path: Path | None = None,
-           folder_name: str = "Batea") -> dict:
+           folder_name: str = "Batea", with_cues: bool = False) -> dict:
     out_path = out_path or (config.EXPORT_DIR / "batea.xml")
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -59,6 +59,7 @@ def export(c: sqlite3.Connection, crate_ids: list[int], tags_in_comment: bool, o
     root = ET.Element("DJ_PLAYLISTS", Version="1.0.0")
     ET.SubElement(root, "PRODUCT", Name="Batea", Version="0.1", Company="Batea")
     coll = ET.SubElement(root, "COLLECTION", Entries=str(len(tracks)))
+    cue_tracks = grid_missing = 0
     for tid, t in tracks.items():
         rating = t["rating"] if t["rating"] is not None else (t["rb_rating"] or 0)
         comment = t["rb_comment"] or ""
@@ -82,8 +83,19 @@ def export(c: sqlite3.Connection, crate_ids: list[int], tags_in_comment: bool, o
         }
         if t["date_added"]:
             attrs["DateAdded"] = t["date_added"]
-        ET.SubElement(coll, "TRACK", **attrs)
-
+        node = ET.SubElement(coll, "TRACK", **attrs)
+        if with_cues:
+            # grilla y cues van JUNTAS: si rekordbox pisa el tema, tiene que encontrar todo lo que ya tenía
+            pay = cuesmod.track_payload(c, tid)
+            if pay["grid_bpm"]:
+                node.set("AverageBpm", f"{pay['grid_bpm']:.2f}")          # el BPM del tema acompaña a la grilla corregida
+            for tp in pay["tempo"]:
+                ET.SubElement(node, "TEMPO", Inizio=tp["inizio"], Bpm=tp["bpm"], Metro=tp["metro"], Battito=tp["battito"])
+            for m in pay["marks"]:
+                ET.SubElement(node, "POSITION_MARK", **m)
+            cue_tracks += bool(pay["marks"])
+            if t["rb_id"] is not None and not pay["exact"]:
+                grid_missing += 1          # está en rekordbox pero no se trajo su XML: no hay grilla exacta para llevar
     pls = ET.SubElement(root, "PLAYLISTS")
     rootnode = ET.SubElement(pls, "NODE", Type="0", Name="ROOT", Count="1")
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -95,5 +107,10 @@ def export(c: sqlite3.Connection, crate_ids: list[int], tags_in_comment: bool, o
             ET.SubElement(node, "TRACK", Key=str(i))
 
     ET.indent(root)
-    ET.ElementTree(root).write(out_path, encoding="UTF-8", xml_declaration=True)
-    return {"path": str(out_path), "tracks": len(tracks), "playlists": len(playlists)}
+    # rekordbox exige la declaración XML estándar en la primera línea, con comillas dobles como la escribe el propio rekordbox
+    # (ElementTree la escribe con comillas simples)
+    out_path.write_text('<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode") + "\n", encoding="utf-8")
+    res = {"path": str(out_path), "tracks": len(tracks), "playlists": len(playlists)}
+    if with_cues:
+        res.update(cue_tracks=cue_tracks, grid_missing=grid_missing)
+    return res

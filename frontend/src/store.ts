@@ -1,9 +1,10 @@
 import { create } from 'zustand'
+import { bp } from './lib/bufferPlayer'
 import { api, audioUrl, isNotFound, type LibrarySource, type Status, type UpdateInfo } from './api'
 import { crateSource, isActiveJob } from './sources'
 import type { Crate, Filters, FolderNode, Job, Tag, Track, UniverseList } from './types'
 
-export type SettingsTab = 'programs' | 'agents'
+export type SettingsTab = 'programs' | 'agents' | 'about'
 
 export type View = 'home' | 'crate' | 'map' | 'inbox' | 'tagger'
 
@@ -29,6 +30,13 @@ interface State {
   toasts: Toast[]
   libraryVersion: number
   exportOpen: boolean
+  cueEditorId: number | null
+  /** sube cada vez que se guardan cues: las ondas vuelven a pedirlas */
+  cueVersion: number
+  bumpCues: () => void
+  setCueEditor: (id: number | null) => void
+  /** cajas que el diálogo de exportar trae marcadas al abrirse (si no, las de la vista actual) */
+  exportPreset: string[] | null
   settings: SettingsTab | null
   setSettings: (v: SettingsTab | null) => void
   setSourcesOpen: (v: boolean) => void
@@ -68,7 +76,7 @@ interface State {
   updateSource: (source: LibrarySource) => void
   bump: () => void
   toast: (text: string, tone?: 'ok' | 'error', action?: { label: string; run: () => void }) => void
-  setExportOpen: (v: boolean) => void
+  setExportOpen: (v: boolean, preset?: string[]) => void
   trackJob: (job: Job) => void
 }
 
@@ -115,6 +123,11 @@ export const useApp = create<State>((set, get) => ({
   toasts: [],
   libraryVersion: 0,
   exportOpen: false,
+  cueEditorId: null,
+  cueVersion: 0,
+  bumpCues: () => set((s) => ({ cueVersion: s.cueVersion + 1 })),
+  setCueEditor: (id) => set({ cueEditorId: id }),
+  exportPreset: null,
   settings: null,
   setSettings: (settings) => set({ settings }),
   setSourcesOpen: (v) => set({ settings: v ? 'programs' : null }),
@@ -222,7 +235,7 @@ export const useApp = create<State>((set, get) => ({
     setTimeout(() => set((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t)) })), stay)
     setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), stay + 120)
   },
-  setExportOpen: (exportOpen) => set({ exportOpen }),
+  setExportOpen: (exportOpen, preset) => set({ exportOpen, exportPreset: exportOpen ? preset ?? null : null }),
   trackJob: (job) => {
     if (tracked.has(job.id)) return
     tracked.add(job.id)
@@ -255,7 +268,12 @@ interface PlayerState {
   duration: number
   volume: number
   error: string | null
-  play: (t: Track) => void
+  /** 'html' = <audio>; 'buffer' = tema decodificado en memoria (posición exacta, para MP3) */
+  engine: 'html' | 'buffer'
+  /** esperando que se prepare el audio para saltar a una posición exacta */
+  preparing: boolean
+  /** `follow: false` = no cambiar la ficha que está abierta (por ejemplo, al escuchar una sugerencia). */
+  play: (t: Track, opts?: { follow?: boolean }) => void
   playFrom: (t: Track, seconds: number) => void
   stop: () => void
   toggle: () => void
@@ -266,6 +284,19 @@ interface PlayerState {
 const audio = typeof Audio !== 'undefined' ? new Audio() : (null as unknown as HTMLAudioElement)
 if (audio) audio.preload = 'auto'
 
+/** Posición real del audio ahora mismo. `time` del store solo se actualiza unas 4 veces por segundo: para dibujar el cabezal sale de acá. */
+export function audioClock(): number {
+  if (!audio) return 0
+  const p = usePlayer.getState()
+  if (p.preparing) return p.time                       // esperando el audio exacto: el cabezal ya marca a dónde se va a saltar
+  if (p.engine === 'buffer') return bp.position()
+  return audio.readyState > 0 ? audio.currentTime : p.time
+}
+
+/** Los MP3 se reproducen desde un buffer cuando hay que saltar de posición (ver lib/bufferPlayer.ts). */
+const RISKY = new Set(['mp3', 'mpeg', 'mp2'])
+const isRisky = (t: Track | null) => !!t && RISKY.has((t.filetype ?? '').toLowerCase())
+
 /** Con el detalle abierto, al poner play a otro tema el detalle pasa a mostrar ese tema. */
 function followPanel(id: number) {
   const app = useApp.getState()
@@ -273,14 +304,34 @@ function followPanel(id: number) {
 }
 
 export const usePlayer = create<PlayerState>((set, get) => {
+  let prepTimer = 0
+  let ticker = 0
+  let pending: number | null = null                       // a dónde saltar cuando el buffer esté listo
+  const html = () => get().engine === 'html'
+  const startTicker = () => {
+    window.clearInterval(ticker)
+    ticker = window.setInterval(() => { if (get().engine === 'buffer' && bp.isPlaying()) set({ time: bp.position() }) }, 200)
+  }
+  const stopTicker = () => window.clearInterval(ticker)
+  const toBuffer = (at: number, playIt: boolean) => {      // pasar del <audio> al buffer, en la posición exacta
+    set({ engine: 'buffer', preparing: false, duration: bp.duration(), time: at })
+    audio.pause()
+    if (playIt) { bp.start(at, get().volume); set({ playing: true }); startTicker() }
+    else { bp.setPos(at); set({ playing: false }) }
+  }
+  const resetEngine = () => { window.clearTimeout(prepTimer); stopTicker(); bp.release(); pending = null; set({ engine: 'html', preparing: false }) }
+
   if (audio) {
-    audio.addEventListener('timeupdate', () => set({ time: audio.currentTime }))
-    audio.addEventListener('durationchange', () => set({ duration: audio.duration || 0 }))
-    audio.addEventListener('play', () => set({ playing: true, error: null }))
-    audio.addEventListener('pause', () => set({ playing: false }))
-    audio.addEventListener('ended', () => set({ playing: false }))
+    audio.addEventListener('timeupdate', () => { if (html() && !get().preparing) set({ time: audio.currentTime }) })
+    audio.addEventListener('seeked', () => { if (html() && !get().preparing) set({ time: audio.currentTime }) })
+    audio.addEventListener('durationchange', () => { if (html()) set({ duration: audio.duration || 0 }) })
+    audio.addEventListener('play', () => { if (html()) set({ playing: true, error: null }) })
+    audio.addEventListener('pause', () => { if (html() && !get().preparing) set({ playing: false }) })
+    audio.addEventListener('ended', () => { if (html()) set({ playing: false }) })
     audio.addEventListener('error', () => set({ playing: false, error: 'No se pudo reproducir este archivo' }))
   }
+  bp.onEnded(() => { stopTicker(); set({ playing: false, time: bp.duration() }) })
+
   return {
     track: null,
     playing: false,
@@ -288,28 +339,48 @@ export const usePlayer = create<PlayerState>((set, get) => {
     duration: 0,
     volume: 0.9,
     error: null,
-    play: (t) => {
+    engine: 'html',
+    preparing: false,
+    play: (t, opts) => {
+      bp.unlock()
       if (!t.online) {
         useApp.getState().toast('El archivo no está disponible: ¿está conectado el disco?', 'error')
         return
       }
-      if (get().track?.id === t.id) {
-        audio.paused ? audio.play() : audio.pause()
-        return
-      }
+      if (get().track?.id === t.id) { get().toggle(); return }
+      resetEngine()
       set({ track: t, time: 0, duration: t.duration || 0, error: null })
-      followPanel(t.id)
+      if (opts?.follow !== false) followPanel(t.id)
       audio.src = audioUrl(t.id)
       audio.volume = get().volume
       // en techno, arrancar donde entra el groove ayuda a escuchar rápido
       void audio.play().catch(() => set({ error: 'No se pudo reproducir este archivo' }))
+      // si se escucha un rato, se va preparando el buffer para que un salto de posición sea exacto
+      if (isRisky(t)) prepTimer = window.setTimeout(() => { if (get().track?.id === t.id && html()) void bp.load(t.id) }, 1500)
     },
     playFrom: (t, seconds) => {
+      bp.unlock()
       if (!t.online) return
+      resetEngine()
+      audio.pause()
       set({ track: t, time: seconds, duration: t.duration || 0, error: null })
       followPanel(t.id)
-      audio.src = audioUrl(t.id)
       audio.volume = get().volume
+      if (isRisky(t)) {                                    // MP3: se arranca desde el buffer, en el punto exacto
+        set({ engine: 'buffer', preparing: true, playing: false })
+        void bp.load(t.id).then((ok) => {
+          if (get().track?.id !== t.id || !get().preparing) return
+          if (ok) { set({ preparing: false, duration: bp.duration() }); bp.start(pending ?? seconds, get().volume); set({ playing: true, time: pending ?? seconds }); startTicker(); pending = null }
+          else {                                           // no se pudo decodificar: se reproduce como siempre
+            set({ engine: 'html', preparing: false })
+            audio.src = audioUrl(t.id)
+            const start = () => { audio.removeEventListener('loadedmetadata', start); try { audio.currentTime = Math.max(0, seconds) } catch { /* sin seek */ } void audio.play().catch(() => set({ error: 'No se pudo reproducir este archivo' })) }
+            audio.addEventListener('loadedmetadata', start); audio.load()
+          }
+        })
+        return
+      }
+      audio.src = audioUrl(t.id)
       const start = () => {
         audio.removeEventListener('loadedmetadata', start)
         try { audio.currentTime = Math.max(0, seconds) } catch { /* sin seek */ }
@@ -318,21 +389,53 @@ export const usePlayer = create<PlayerState>((set, get) => {
       audio.addEventListener('loadedmetadata', start)
       audio.load()
     },
-    stop: () => { if (audio && !audio.paused) audio.pause() },
+    stop: () => {
+      if (get().engine === 'buffer') { if (bp.isPlaying()) { const p = bp.pause(); stopTicker(); set({ playing: false, time: p }) } return }
+      if (audio && !audio.paused) audio.pause()
+    },
     toggle: () => {
-      if (!get().track) return
+      if (!get().track || get().preparing) return
+      bp.unlock()
+      if (get().engine === 'buffer') {
+        if (bp.isPlaying()) { const p = bp.pause(); stopTicker(); set({ playing: false, time: p }) }
+        else { bp.start(bp.position(), get().volume); set({ playing: true }); startTicker() }
+        return
+      }
       audio.paused ? audio.play() : audio.pause()
     },
     seek: (s) => {
-      if (!get().track) return
-      audio.currentTime = Math.max(0, s)
+      const tr = get().track
+      if (!tr) return
+      bp.unlock()
+      const to = Math.max(0, s)
+      if (get().engine === 'buffer') {
+        if (get().preparing) { pending = to; set({ time: to }); return }
+        if (bp.isPlaying()) bp.start(to, get().volume); else bp.setPos(to)
+        set({ time: to })
+        return
+      }
+      if (!isRisky(tr)) { audio.currentTime = to; return }
+      const was = !audio.paused
+      if (bp.ready(tr.id)) { toBuffer(to, was); return }
+      // MP3 todavía sin preparar: se espera al buffer para saltar a la posición exacta (un instante, solo la primera vez)
+      pending = to
+      set({ preparing: true, time: to })
+      audio.pause()
+      void bp.load(tr.id).then((ok) => {
+        if (get().track?.id !== tr.id || !get().preparing) return
+        const at = pending ?? to
+        pending = null
+        if (ok) toBuffer(at, was)
+        else { set({ preparing: false }); audio.currentTime = at; if (was) void audio.play() }   // sin buffer: como siempre
+      })
     },
     setVolume: (v) => {
       audio.volume = v
+      bp.setVolume(v)
       set({ volume: v })
     },
   }
 })
 
 // Acceso desde la consola y las pruebas automáticas (window.__batea.useApp.getState()…)
-;(window as unknown as Record<string, unknown>).__batea = { useApp, usePlayer, audio }
+;(window as unknown as Record<string, unknown>).__batea = { useApp, usePlayer, audio, audioClock }

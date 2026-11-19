@@ -9,7 +9,7 @@ import { cleanTitle, compatibleKeys, fmtBpm, fmtDate, fmtTime, keyColor, ROLE_CA
 import { EnergyEditor, KeyBadge, Sleeve, Stars } from './bits'
 import { groupTags } from './FilterBar'
 import { IconFinder, IconLink, IconMix, IconPause, IconPlay, IconPlus, IconSearch, IconThumbDown, IconThumbUp, IconX } from './icons'
-import { useWaveform, Waveform } from './Waveform'
+import { LiveWaveform, useWaveform } from './Waveform'
 import { GlyphSwap, HoverList } from '../lib/fluidHover'
 import { Seg } from '../lib/Seg'
 import '../mixpicker.css'
@@ -141,7 +141,7 @@ function RelationPicker({ seed, onDone }: { seed: TrackDetail; onDone: () => voi
 /** `id`: el tema que se muestra (al cerrarse la ficha sigue siendo el último mientras sale; ver App.tsx). */
 export function TrackPanel({ id: selectedId }: { id: number | null }) {
   const { select, tags, crates, patchTrack, toast, askText, loadMeta, go, crateId, openMix, openMixPicker, libraryVersion } = useApp()
-  const { play, track: cur, playing, time, duration, seek } = usePlayer()
+  const { play, track: cur, playing } = usePlayer()
   const [d, setD] = useState<TrackDetail | null>(null)
   const [sourceAnalysis, setSourceAnalysis] = useState<{ id: number; sources: TrackSource[] | 'error' } | null>(null)
   const [recs, setRecs] = useState<Recommendation[] | null>(null)
@@ -231,10 +231,12 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
               <GlyphSwap on={isCur && playing} a={<IconPlay size={15} />} b={<IconPause size={15} />} />
             </button>
             <div className="wave" style={{ flex: 1 }}>
-              <Waveform data={wave} progress={isCur && duration ? time / duration : 0} introBars={d.intro_bars} outroBars={d.outro_bars}
-                onSeek={(f) => { if (isCur) seek(f * duration); else if (d.online) { play(toTrack(d)); setTimeout(() => usePlayer.getState().seek(f * (d.duration ?? 0)), 250) } }} />
+              <LiveWaveform track={toTrack(d)} data={wave} introBars={d.intro_bars} outroBars={d.outro_bars} />
             </div>
           </div>
+          <button className="btn mix-btn" title="Poner o editar las cues de este tema (hot cues, memory cues, loops)" onClick={() => useApp.getState().setCueEditor(d.id)}>
+            Cues…
+          </button>
           <button className="btn mix-btn" title="Probar mezcla (M)" onClick={() => openMixPicker(d.id)}>
             <IconMix size={13} /> Probar mezcla con…{!mixSeen() && <span className="mix-new">Nuevo</span>}
           </button>
@@ -336,7 +338,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
                       extra={kind === 'history' ? `${r.direction === 'out' ? 'después' : 'antes'}, ${r.count} ${r.count === 1 ? 'vez' : 'veces'}` : null} />
                   </div>
                   <div className="acts">
-                    <button className="btn ghost sm txt" title="Probar la mezcla" onClick={(e) => { e.stopPropagation(); r.direction === 'in' && kind === 'history' ? openMix(r.other_id, d.id) : openMix(d.id, r.other_id) }}><IconMix size={13} /> Probar</button>
+                    <button className="btn ghost sm txt" title={r.mix ? 'Abrir la mezcla guardada' : 'Probar la mezcla'} onClick={(e) => { e.stopPropagation(); if (r.mix) openMix(r.mix[0], r.mix[1]); else r.direction === 'in' && kind === 'history' ? openMix(r.other_id, d.id) : openMix(d.id, r.other_id) }}><IconMix size={13} /> Probar</button>
                     {r.kind !== 'history' && !String(r.source ?? '').startsWith('history') && <button className="btn ghost sm icon" title="Quitar" aria-label="Quitar" onClick={async (e) => { e.stopPropagation(); await api.unrelate(r.id); load(); loadRecs() }}><IconX size={13} /></button>}
                   </div>
                 </div>
@@ -368,7 +370,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
                 </div>
                 <div>
                   <div className="acts">
-                    {r.track.online && <button className="btn ghost sm icon" title="Escuchar" aria-label="Escuchar" onClick={(e) => { e.stopPropagation(); play(r.track) }}><IconPlay size={11} /></button>}
+                    {r.track.online && <button className="btn ghost sm icon" title="Escuchar" aria-label="Escuchar" onClick={(e) => { e.stopPropagation(); play(r.track, { follow: false }) }}><IconPlay size={11} /></button>}
                     <button className="btn ghost sm txt" title="Probar la mezcla" onClick={(e) => { e.stopPropagation(); openMix(d.id, r.id) }}><IconMix size={13} /> Probar</button>
                     <button className="btn ghost sm icon" title="Mezclan bien" aria-label="Mezclan bien" onClick={async (e) => { e.stopPropagation(); await api.feedback(d.id, r.id, true); toast('Anotado'); load(); loadRecs() }}><IconThumbUp size={13} /></button>
                     <button className="btn ghost sm icon" title="No van" aria-label="No van" onClick={async (e) => { e.stopPropagation(); await api.feedback(d.id, r.id, false); setRecs((x) => x?.filter((y) => y.id !== r.id) ?? null); load() }}><IconThumbDown size={13} /></button>

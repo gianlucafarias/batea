@@ -79,7 +79,7 @@ Además del historial de Git, cada instalador guarda una **huella** (sha256) de 
 - **Búsqueda automática de música** (al abrir y al conectar un disco): la decide la persona (`autodiscover` en la base; endpoints
   `POST /api/setup` y `POST /api/autodiscover`; interruptor en «Analizar e importar»). Una instalación nueva que no contestó **no
   busca nada**; las que ya tenían temas antes de existir la pregunta siguen buscando (así no cambia nada para ellas).
-- **Volver a verla:** botón «▷ Ver la presentación» al pie de la barra lateral (modo repetición: sin panel de carga, Escape cierra).
+- **Volver a verla:** botón «Ver la presentación» en Ajustes → Acerca de (modo repetición: sin panel de carga, Escape cierra).
 - **Mantenerla al día:** las diapositivas son el arreglo `SLIDES` de `frontend/src/components/Welcome.tsx`; cada una tiene su
   ilustración, armada con los mismos componentes de la app (cajas, sobres, etiquetas) y datos inventados, sin imágenes. **Cuando se
   agrega o cambia una función principal, actualizar o sumar una diapositiva** (y ajustar `SLIDE_MS` si pasan de unas 8).

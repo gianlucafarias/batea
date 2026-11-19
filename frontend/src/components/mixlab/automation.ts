@@ -76,3 +76,34 @@ export function posToDb(pos: number): number {
   if (db <= KILL + 1.5) return KILL
   return Math.round(db * 2) / 2 || 0
 }
+
+/** Lo que se guarda de una mezcla armada: dónde entra B, desde dónde arranca, la fase y las curvas. */
+export interface SavedMix {
+  v: 1
+  mixBar: number
+  startBar: number
+  nudge: number
+  style: Transition
+  length: number
+  custom: boolean
+  automation: Automation
+}
+
+const isNum = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
+
+/** Lee una mezcla guardada; si algo no cuadra devuelve null y se arranca de cero. */
+export function parseSaved(raw: unknown): SavedMix | null {
+  if (!raw || typeof raw !== 'object') return null
+  const m = raw as Record<string, unknown>
+  if (!isNum(m.mixBar) || !isNum(m.startBar) || !isNum(m.nudge) || !isNum(m.length)) return null
+  if (m.style !== 'bass' && m.style !== 'blend' && m.style !== 'cut') return null
+  const auto = m.automation as Record<string, unknown> | undefined
+  if (!auto || typeof auto !== 'object') return null
+  const automation = {} as Automation
+  for (const lane of LANE_IDS) {
+    const pts = auto[lane]
+    if (!Array.isArray(pts) || !pts.every((p) => p && isNum(p.at) && isNum(p.v))) return null
+    automation[lane] = pts.map((p) => ({ at: p.at, v: p.v }))
+  }
+  return { v: 1, mixBar: m.mixBar, startBar: m.startBar, nudge: m.nudge, style: m.style, length: m.length, custom: !!m.custom, automation }
+}

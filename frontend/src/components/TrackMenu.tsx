@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { useFluidHover } from '../lib/fluidHover'
-import { spring, usePresence } from '../lib/motion'
+import { useEffect, useState } from 'react'
 import { create } from 'zustand'
+import { spring, usePresence } from '../lib/motion'
+import { Item, MenuShell, Sep } from './ContextMenu'
 import { api } from '../api'
 import { useApp, usePlayer } from '../store'
 import type { Track } from '../types'
@@ -41,70 +41,14 @@ async function copy(text: string) {
   try { document.execCommand('copy') } finally { ta.remove() }
 }
 
-// ------------------------------------------------------------------ piezas
-function Item({ children, onClick, disabled, hint, danger, sub }: {
-  children: ReactNode; onClick?: () => void; disabled?: boolean; hint?: string; danger?: boolean; sub?: ReactNode
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const [left, setLeft] = useState(false)
-  useLayoutEffect(() => {
-    if (!open || !ref.current) return
-    const r = ref.current.getBoundingClientRect()
-    setLeft(r.right + 220 > window.innerWidth)
-  }, [open])
-  return (
-    <div ref={ref} data-fh={disabled ? undefined : ''} className={`cm-item${disabled ? ' off' : ''}${danger ? ' danger' : ''}${sub ? ' has-sub' : ''}`} title={hint}
-      onMouseEnter={() => sub && setOpen(true)} onMouseLeave={() => sub && setOpen(false)}
-      onClick={() => { if (!disabled && onClick) onClick() }}>
-      <span>{children}</span>
-      {sub && <span className="cm-arrow">›</span>}
-      {sub && open && !disabled && <SubMenu left={left}>{sub}</SubMenu>}
-    </div>
-  )
-}
-function SubMenu({ left, children }: { left: boolean; children: ReactNode }) {
-  const fh = useFluidHover<HTMLDivElement>()
-  return <div ref={fh.ref} className={`cm cm-sub${left ? ' left' : ''}`}>{fh.highlight}{children}</div>
-}
-const Sep = () => <div className="cm-sep" />
-
-// ------------------------------------------------------------------ menú
 export function TrackMenu() {
   const { menu: live, close } = useMenu()
-  // al cerrarse, el menú se desvanece rápido con su último contenido (no se pueden clickear opciones mientras)
-  const [menu, closing] = usePresence(live, spring.fast.exit)
+  return <MenuShell live={live} close={close}>{(menu) => <TrackMenuItems menu={menu} close={close} />}</MenuShell>
+}
+
+function TrackMenuItems({ menu, close }: { menu: NonNullable<MenuState['menu']>; close: () => void }) {
   const app = useApp()
   const playing = usePlayer((s) => s.track)
-  const ref = useRef<HTMLDivElement | null>(null)
-  const { ref: hoverRef, highlight } = useFluidHover<HTMLDivElement>()
-  const setRef = useCallback((el: HTMLDivElement | null) => { ref.current = el; hoverRef(el) }, [hoverRef])
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
-
-  useEffect(() => {
-    if (!live) return
-    const down = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) close() }
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-    const wheel = () => close()
-    window.addEventListener('mousedown', down)
-    window.addEventListener('keydown', key)
-    window.addEventListener('wheel', wheel, { passive: true })
-    window.addEventListener('blur', close)
-    return () => {
-      window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key)
-      window.removeEventListener('wheel', wheel); window.removeEventListener('blur', close)
-    }
-  }, [live, close])
-
-  // que no se salga de la ventana (al cerrarse queda donde estaba)
-  useLayoutEffect(() => {
-    if (!live) return
-    if (!ref.current) { setPos(null); return }
-    const r = ref.current.getBoundingClientRect()
-    setPos({ x: Math.min(live.x, window.innerWidth - r.width - 8), y: Math.min(live.y, window.innerHeight - r.height - 8) })
-  }, [live])
-
-  if (!menu) return null
   const ts = menu.tracks
   const one = ts.length === 1 ? ts[0] : null
   const ids = ts.map((t) => t.id)
@@ -149,9 +93,7 @@ export function TrackMenu() {
   const mixWith = playing && one && playing.id !== one.id ? playing : null
 
   return (
-    <div ref={setRef} className={`cm${closing ? ' closing' : ''}`} style={{ left: pos?.x ?? menu.x, top: pos?.y ?? menu.y, visibility: pos ? 'visible' : 'hidden' }}
-      onContextMenu={(e) => e.preventDefault()}>
-      {highlight}
+    <>
       <div className="cm-head ellipsis">{one ? cleanTitle(one.title) : `${n} temas seleccionados`}</div>
 
       {one && <Item onClick={run(() => usePlayer.getState().play(one))} disabled={!one.online} hint={one.online ? undefined : 'El archivo no está disponible'}>Reproducir</Item>}
@@ -205,6 +147,7 @@ export function TrackMenu() {
       <Sep />
 
       {one && <Item onClick={run(compatibles)} disabled={!one.key && !one.bpm} hint="Temas de toda la colección con tono compatible y BPM parecido">Buscar compatibles para mezclar</Item>}
+      {one && <Item onClick={run(() => app.setCueEditor(one.id))} hint="Hot cues, memory cues y loops">Editar cues…</Item>}
       {one && <Item onClick={run(() => app.openMixPicker(one.id))} hint="Elegí con qué tema">Probar mezcla con…</Item>}
       {n === 2 && <Item onClick={run(() => app.openMix(ids[0], ids[1]))}>Probar la mezcla</Item>}
       {mixWith && one && <Item onClick={run(() => app.openMix(mixWith.id, one.id))} hint={`Con “${cleanTitle(mixWith.title)}”`}>Probar mezcla con el que suena</Item>}
@@ -236,7 +179,7 @@ export function TrackMenu() {
           app.toast(n === 1 ? 'Eliminado de Batea (el archivo sigue en su lugar)' : `${n} temas eliminados de Batea (los archivos siguen en su lugar)`)
         })}>Eliminar de Batea…</Item>
       )}
-    </div>
+    </>
   )
 }
 

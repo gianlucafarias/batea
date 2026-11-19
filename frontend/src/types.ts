@@ -51,6 +51,8 @@ export interface Relation {
   energy: number | null
   has_art: number
   direction: 'in' | 'out'
+  /** [A, B] de la mezcla guardada con este tema (A sale, B entra), si la hay */
+  mix?: [number, number] | null
 }
 
 export interface TrackDetail extends Track {
@@ -85,6 +87,10 @@ export interface Crate {
   hidden?: number
   date?: string | null
   count: number
+  /** orden elegido en la pantalla de Bateas */
+  home_position?: number | null
+  /** solo cajas propias: nunca exportada · cambió después de exportarla · al día */
+  export_state?: 'never' | 'stale' | 'done'
   query?: Filters
 }
 

@@ -178,8 +178,10 @@ def query_tracks(c: sqlite3.Connection, crate: str | None, filters: dict, limit:
     if crate and crate.isdigit():
         kind = c.execute("SELECT kind FROM crates WHERE id=?", (int(crate),)).fetchone()
         if kind and kind["kind"] in ("playlist", "session", "user"):
-            join = "LEFT JOIN crate_tracks cp ON cp.track_id=t.id AND cp.crate_id=" + str(int(crate))
-            order = "cp.position, t.id"
+            join = ("LEFT JOIN crate_tracks cp ON cp.track_id=t.id AND cp.crate_id=" + str(int(crate))
+                    + " LEFT JOIN crate_order co ON co.track_id=t.id AND co.crate_id=" + str(int(crate)))
+            # primero lo que el DJ ordenó a mano; lo que llegó después (en el programa) va al final, en su orden
+            order = "co.position IS NULL, co.position, cp.position, t.id"
     sql = f"SELECT {TRACK_COLUMNS} FROM tracks t {join}"
     if where:
         sql += " WHERE " + " AND ".join(where)

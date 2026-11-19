@@ -1,5 +1,6 @@
 import { memo, useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent, type Ref } from 'react'
 import { Seg } from '../../lib/Seg'
+import type { CueDto } from '../../api'
 import { IconMinus, IconPlus } from '../icons'
 import { lanesOf, posToDb, upsert, type Automation, type LaneGroup, type LaneId, type Point } from './automation'
 import { beatAt, clamp, KILL, nearestBar, signed, type Deck, type Placement, type Timing, type Transition } from './model'
@@ -46,6 +47,9 @@ interface Props {
   onAutomation: (lane: LaneId, points: Point[]) => void
   peaksA: Peaks | null
   peaksB: Peaks | null
+  cuesA: CueDto[]
+  cuesB: CueDto[]
+  showCues: boolean
   onSeek: (time: number) => void
   onPlacement: (patch: Partial<Placement>) => void
 }
@@ -333,7 +337,7 @@ export const Timeline = memo(function Timeline(props: Props) {
     setView(left, preset === 'all' ? props.timing.end : span)
     dirty.current = true
     requestDraw()
-  }, [props.timing, props.placement, props.style, props.automation, props.group, props.peaksA, props.peaksB, preset, requestDraw, setView])
+  }, [props.timing, props.placement, props.style, props.automation, props.group, props.peaksA, props.peaksB, props.cuesA, props.cuesB, props.showCues, preset, requestDraw, setView])
 
   const down = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || drag.current) return

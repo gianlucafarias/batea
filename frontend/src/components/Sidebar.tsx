@@ -153,6 +153,12 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand"><BrandMark /><span className="brand-name">batea</span></div>
+      <button className="side-version" onClick={() => setSettings('about')}
+        title={update?.update_available ? `Hay una versión nueva: ${update.latest}` : 'Acerca de Batea y actualizaciones'}>
+        <span className="num">{status?.version ? `v${status.version.version}` : 'v…'}</span>
+        {status?.version?.fingerprint === 'dev' && <span className="faint">desarrollo</span>}
+        {update?.update_available && <i className="side-version-dot" aria-label="Hay una actualización" />}
+      </button>
       <UniverseSwitcher />
       <nav className="nav" ref={navHover.ref}>
         {navHover.highlight}
@@ -219,9 +225,6 @@ export function Sidebar() {
           <button className="btn sm" onClick={() => setSettings('programs')} title="Programas de DJ y agentes de IA"><IconSettings size={14} /> Ajustes</button>
           <button className="btn sm" onClick={() => setExportOpen(true)} title="Exportar cajas a rekordbox, Traktor, Serato o M3U"><IconExport size={14} /> Exportar</button>
         </div>
-        <button className="btn sm ghost" onClick={() => useApp.getState().setWelcome('replay')} title="Volver a ver la presentación">
-          Ver la presentación
-        </button>
         {update?.update_available && (
           <button className="btn sm ghost" onClick={() => { void api.openUpdate().catch(() => {}) }} title={update.notes || 'Abrir la descarga'}>
             Hay una versión nueva ({update.latest}) · Descargar

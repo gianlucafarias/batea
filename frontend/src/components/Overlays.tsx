@@ -1,4 +1,4 @@
-import { artistCrate } from './Artist'
+import { ArtistLinks, artistCrate } from './Artist'
 import { useEffect, useRef, useState } from 'react'
 import { api, isNotFound, type ExportResult, type ExportTarget, type ExportTargetId } from '../api'
 import { useApp, usePlayer } from '../store'
@@ -6,7 +6,7 @@ import { cleanTitle, fmtTime } from '../util'
 import { Sleeve } from './bits'
 import { folderCrate } from './FolderTree'
 import { IconMix, IconPause, IconPlay, IconVolume } from './icons'
-import { useWaveform, Waveform } from './Waveform'
+import { LiveWaveform, useWaveform } from './Waveform'
 import { GlyphSwap, HoverList } from '../lib/fluidHover'
 import { spring, usePresence } from '../lib/motion'
 
@@ -23,9 +23,12 @@ function lastTarget(): string | null {
 }
 
 export function ExportDialog() {
-  const { exportOpen, setExportOpen, crates, virtualCrates, folders, crateId, toast } = useApp()
+  const { exportOpen, exportPreset, setExportOpen, crates, virtualCrates, folders, crateId, toast } = useApp()
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [tagsInComment, setTagsInComment] = useState(false)
+  const [keepPrevious, setKeepPrevious] = useState(true)
+  const [withCues, setWithCues] = useState(false)
+  const [cuesXml, setCuesXml] = useState<boolean | null>(null)
   const [targets, setTargets] = useState<ExportTarget[]>([FALLBACK_TARGET])
   const [target, setTarget] = useState<ExportTargetId>('rekordbox')
   const [oldApi, setOldApi] = useState(false)
@@ -36,8 +39,9 @@ export function ExportDialog() {
     if (!exportOpen) return
     const mine = crates.filter((c) => c.kind === 'user' || c.kind === 'smart').map((c) => String(c.id))
     // "Toda la colección" y "Eliminados" no figuran en la lista: preseleccionarlas exportaba algo que no se veía marcado
-    setSel(new Set(crateId && crateId !== 'all' && crateId !== 'hidden' ? [crateId] : mine))
+    setSel(new Set(exportPreset ?? (crateId && crateId !== 'all' && crateId !== 'hidden' ? [crateId] : mine)))
     let alive = true
+    api.cuesStatus().then((c) => alive && setCuesXml(!!c.xml)).catch(() => alive && setCuesXml(null))
     api.exportTargets().then(({ targets: list }) => {
       if (!alive) return
       setOldApi(false)
@@ -50,12 +54,13 @@ export function ExportDialog() {
       if (isNotFound(e)) { setOldApi(true); setTargets([FALLBACK_TARGET]); setTarget('rekordbox') } else toast((e as Error).message, 'error')
     })
     return () => { alive = false }
-  }, [exportOpen, crateId, crates, toast])
+  }, [exportOpen, exportPreset, crateId, crates, toast])
 
   if (!shown) return null
   const here = folderCrate(crateId, folders) ?? artistCrate(crateId)
   const groups = [
     ...(here ? [{ label: here.kind === 'artist' ? 'Este artista (como playlist)' : 'Esta carpeta (como playlist)', list: [here] }] : []),
+    { label: 'Tus carpetas', list: crates.filter((c) => c.kind === 'folder' && c.source === 'user') },
     { label: 'Tus cajas', list: crates.filter((c) => c.kind === 'user' || c.kind === 'smart') },
     { label: 'Atajos', list: virtualCrates.filter((c) => c.id !== 'all' && c.id !== 'hidden') },
     { label: 'Playlists de rekordbox', list: crates.filter((c) => c.kind === 'playlist' && !c.hidden && c.count) },
@@ -67,10 +72,11 @@ export function ExportDialog() {
       const ids = [...sel]
       const res: ExportResult = oldApi
         ? await api.exportRb(ids, tagsInComment).then((r) => ({ ok: true, target: 'rekordbox' as const, path: r.path, files: [r.path], tracks: r.tracks, missing: 0, warnings: [] }))
-        : await api.exportTo(cur.id, ids, tagsInComment)
+        : await api.exportTo(cur.id, ids, tagsInComment, keepPrevious, withCues)
       try { localStorage.setItem(LAST_TARGET, cur.id) } catch { /* sin almacenamiento */ }
       setExportOpen(false)
-      const missing = res.missing ? ` · ${res.missing} sin archivo ahora` : ''
+      void useApp.getState().loadMeta()      // para que las cajas exportadas dejen de figurar como pendientes
+      const missing = (res.missing ? ` · ${res.missing} sin archivo ahora` : '') + (res.kept ? ` · más ${res.kept} ${res.kept === 1 ? 'caja' : 'cajas'} de antes` : '') + (res.cue_tracks ? ` · cues de ${res.cue_tracks} ${res.cue_tracks === 1 ? 'tema' : 'temas'}` : '') + (res.grid_missing ? ` · ${res.grid_missing} sin grilla (falta el XML de rekordbox en Ajustes)` : '')
       toast(res.tracks ? `${cur.label}: ${res.tracks} ${res.tracks === 1 ? 'tema' : 'temas'}${missing} → ${res.path}` : (res.warnings[0] ?? 'No había temas para exportar'),
         res.tracks ? 'ok' : 'error',
         res.tracks ? { label: 'Mostrar en Finder', run: () => { api.revealExport(res.path).catch((e) => toast((e as Error).message, 'error')) } } : undefined)
@@ -119,6 +125,21 @@ export function ExportDialog() {
             </div>
           ))}
         </HoverList>
+        {cur.id === 'rekordbox' && (
+          <>
+          <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', lineHeight: 1.45 }}>
+            <input type="checkbox" checked={withCues} onChange={(e) => setWithCues(e.target.checked)} style={{ marginTop: 2 }} />
+            <span>Llevar cues y grilla <b style={{ color: 'var(--accent)' }}>(en prueba)</b><br />
+              <span className="muted" style={{ fontSize: 12 }}>Para los temas que ya están en rekordbox, escribe en el archivo su grilla y todas sus cues, así no se pierde nada si rekordbox los pisa al importar. Probalo primero con una playlist chica y con un respaldo hecho.</span>
+              {withCues && cuesXml === false && <span style={{ display: 'block', fontSize: 12, color: 'var(--accent)', marginTop: 4 }}>Todavía no trajiste el XML de rekordbox, así que los temas de rekordbox saldrían sin grilla. Traelo en Ajustes → Programas.</span>}</span>
+          </label>
+          <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', lineHeight: 1.45 }}>
+            <input type="checkbox" checked={keepPrevious} onChange={(e) => setKeepPrevious(e.target.checked)} style={{ marginTop: 2 }} />
+            <span>Mantener las cajas que ya exporté antes<br />
+              <span className="muted" style={{ fontSize: 12 }}>rekordbox lee un solo archivo y cada exportación lo reescribe. Con esto el archivo lleva también las anteriores; sin esto, solo las que elegiste ahora.</span></span>
+          </label>
+        </>
+        )}
         {cur.id === 'rekordbox' && (
           <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', lineHeight: 1.45 }}>
             <input type="checkbox" checked={tagsInComment} onChange={(e) => setTagsInComment(e.target.checked)} style={{ marginTop: 2 }} />
@@ -173,7 +194,7 @@ export function Toasts() {
 }
 
 export function Player() {
-  const { track, playing, time, duration, toggle, seek, volume, setVolume, error } = usePlayer()
+  const { track, playing, time, duration, toggle, volume, setVolume, error, preparing } = usePlayer()
   const select = useApp((s) => s.select)
   const openMixPicker = useApp((s) => s.openMixPicker)
   const wave = useWaveform(track?.id)
@@ -185,8 +206,10 @@ export function Player() {
           <>
             <button className="thumb" onClick={() => select(track.id)} aria-label="Ver la ficha del tema"><Sleeve id={track.id} title={track.title} trackKey={track.key} hasArt={track.has_art} size="s" px={42} /></button>
             <div style={{ minWidth: 0 }}>
-              <div className="ellipsis" style={{ fontWeight: 600 }}>{cleanTitle(track.title)}</div>
-              <div className="ellipsis muted" style={{ fontSize: 11.5 }}>{error ?? track.artist}</div>
+              <div className="ellipsis" style={{ fontWeight: 600 }}>
+                <button className="artist-link" title="Ver la ficha del tema" onClick={() => select(track.id)}>{cleanTitle(track.title)}</button>
+              </div>
+              <div className="ellipsis muted" style={{ fontSize: 11.5 }}>{error ?? <ArtistLinks artist={track.artist} />}</div>
             </div>
           </>
         ) : <span className="faint" style={{ fontSize: 12, paddingLeft: 6 }}>Doble click en un disco para escucharlo</span>}
@@ -195,9 +218,9 @@ export function Player() {
         <button className="playbtn" disabled={!track} onClick={toggle} aria-label={playing ? 'Pausar' : 'Reproducir'} title={playing ? 'Pausar (espacio)' : 'Reproducir (espacio)'}>
           <GlyphSwap on={playing} a={<IconPlay size={15} />} b={<IconPause size={15} />} />
         </button>
-        <span className="num muted" style={{ fontSize: 11, width: 36, textAlign: 'right' }}>{fmtTime(time)}</span>
+        <span className="num muted" style={{ fontSize: 11, width: 36, textAlign: 'right' }} title={preparing ? 'Preparando el audio para saltar a la posición exacta…' : undefined}>{preparing ? '…' : fmtTime(time)}</span>
         <div className="pwave">
-          <Waveform data={track ? wave : null} progress={duration ? time / duration : 0} onSeek={(f) => seek(f * duration)} introBars={track?.intro_bars} outroBars={track?.outro_bars} />
+          <LiveWaveform track={track} data={track ? wave : null} introBars={track?.intro_bars} outroBars={track?.outro_bars} />
         </div>
         <span className="num muted" style={{ fontSize: 11, width: 36 }}>{fmtTime(duration || track?.duration)}</span>
         <button className="btn ghost sm" disabled={!track} title="Probar mezcla con otro tema (M)" onClick={() => track && openMixPicker(track.id)}><IconMix size={13} /> Mezclar con…</button>

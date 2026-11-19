@@ -73,7 +73,7 @@ def read_beatgrid(dat: bytes) -> tuple[np.ndarray, np.ndarray] | None:
     return times, down
 
 
-def read_curves(anlz_dir: Path) -> Curves | None:
+def read_curves(anlz_dir: Path, duration: float | None = None) -> Curves | None:
     ext = _read(anlz_dir / "ANLZ0000.EXT")
     dat = _read(anlz_dir / "ANLZ0000.DAT")
     beats = down = None
@@ -106,7 +106,8 @@ def read_curves(anlz_dir: Path) -> Curves | None:
             h = (v & 31) / 31.0
             white = (v >> 5) / 7.0
             bands = np.stack([1 - white, np.full_like(white, 0.5), white], axis=1).astype(np.float32)
-            dur = float(beats[-1]) if beats is not None and len(beats) else 0
+            # la preview cubre el tema entero: con la duración real cada columna cae donde suena
+            dur = float(duration) if duration else (float(beats[-1]) if beats is not None and len(beats) else 0)
             rate = n / dur if dur > 0 else 1.0
             return Curves(rate, h.astype(np.float32), bands, beats, down)
     return None

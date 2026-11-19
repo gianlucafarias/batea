@@ -9,6 +9,8 @@ import { MixPickerHost } from './components/MixPicker'
 import { Tagger } from './components/Tagger'
 import { UniverseEditor } from './components/Universe'
 import { ExportDialog, Player, PromptModal, Toasts } from './components/Overlays'
+import { CueEditor } from './components/CueEditor'
+import { PopMenu } from './components/ContextMenu'
 import { EditTrackDialog, TrackMenu } from './components/TrackMenu'
 import { Sidebar } from './components/Sidebar'
 import { TrackPanel } from './components/TrackPanel'
@@ -150,6 +152,8 @@ export default function App() {
       <MixPickerHost />
       <PromptModal />
       <TrackMenu />
+      <PopMenu />
+      <CueEditor />
       <EditTrackDialog />
       <Toasts />
       {dragging && <div className="drop-ov"><div><h2>Soltá para traer a Batea</h2><div className="muted">Temas sueltos o carpetas enteras. Batea reconoce los temas que ya están en la librería.</div></div></div>}

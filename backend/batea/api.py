@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import subprocess
+import xml.etree.ElementTree as ET
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, analysis, anlz, config, db, discover, export, features, folders, jobs, keyfill, links, rbsync, recommend, runtime, universe, updates
+from . import agents, analysis, anlz, config, cues, db, discover, export, features, folders, jobs, keyfill, links, rbsync, recommend, runtime, universe, updates
 from .sources import registry
 from .sources.base import KINDS, LABELS
 from .api_helpers import (
@@ -333,7 +334,7 @@ def folder_tree() -> list[dict]:
 def crates() -> dict:
     with db.conn() as c:
         rows = [dict(r) for r in c.execute(
-            """SELECT c.id, c.name, c.kind, c.parent_id, c.hidden, c.date, c.query, c.position, COALESCE(c.source, 'user') AS source,
+            """SELECT c.id, c.name, c.kind, c.parent_id, c.hidden, c.date, c.query, c.position, c.home_position, COALESCE(c.source, 'user') AS source,
                       (SELECT COUNT(*) FROM crate_tracks ct WHERE ct.crate_id=c.id) AS count
                FROM crates c ORDER BY c.position, c.name"""
         )]
@@ -346,7 +347,10 @@ def crates() -> dict:
                 r["count"] = counts.get(r["id"], 0)
         virtual = [{"id": key, "name": name, "kind": "virtual", "count": count_tracks(c, key)}
                    for key, name in VIRTUAL_CRATES.items()]
+        exp = export.states(c)
         for r in rows:
+            if r["id"] in exp:
+                r["export_state"] = exp[r["id"]]
             if r["kind"] == "smart":
                 r["count"] = count_tracks(c, str(r["id"]))
                 r["query"] = json.loads(r["query"] or "{}")
@@ -385,12 +389,24 @@ class CrateIn(BaseModel):
     parent_id: int | None = None
     query: dict | None = None
     track_ids: list[int] | None = None
+    kind: str | None = None       # "folder" para una carpeta; sin esto, una caja (o inteligente si trae query)
+
+
+def _folder_or_none(c, parent_id: int | None) -> int | None:
+    """Una caja solo puede colgar de una carpeta que existe."""
+    if parent_id is None:
+        return None
+    r = c.execute("SELECT kind FROM crates WHERE id=?", (parent_id,)).fetchone()
+    if not r or r["kind"] != "folder":
+        raise HTTPException(400, "Esa carpeta no existe")
+    return parent_id
 
 
 @app.post("/api/crates")
 def create_crate(body: CrateIn) -> dict:
     with db.conn() as c:
-        kind = "smart" if body.query is not None else "user"
+        kind = "folder" if body.kind == "folder" else "smart" if body.query is not None else "user"
+        body.parent_id = None if kind == "folder" else _folder_or_none(c, body.parent_id)
         cur = c.execute(
             "INSERT INTO crates(name, kind, parent_id, query, position, source) VALUES (?,?,?,?, (SELECT COALESCE(MAX(position),0)+1 FROM crates), 'user')",
             (body.name, kind, body.parent_id, json.dumps(body.query) if body.query is not None else None),
@@ -408,6 +424,7 @@ class CratePatch(BaseModel):
     name: str | None = None
     hidden: bool | None = None
     query: dict | None = None
+    parent_id: int | None = None     # mover una caja propia a una carpeta (null = a Mostrador)
 
 
 @app.patch("/api/crates/{cid}")
@@ -415,6 +432,9 @@ def patch_crate(cid: int, body: CratePatch) -> dict:
     with db.conn() as c:
         if body.name is not None:
             c.execute("UPDATE crates SET name=? WHERE id=? AND rb_id IS NULL", (body.name, cid))
+        if "parent_id" in body.model_fields_set:
+            parent = _folder_or_none(c, body.parent_id)
+            c.execute("UPDATE crates SET parent_id=?, home_position=NULL WHERE id=? AND rb_id IS NULL AND kind IN ('user','smart')", (parent, cid))
         if body.hidden is not None:
             ids = [r[0] for r in c.execute(
                 "WITH RECURSIVE sub(id) AS (SELECT ? UNION ALL SELECT c.id FROM crates c JOIN sub ON c.parent_id=sub.id) SELECT id FROM sub",
@@ -427,8 +447,47 @@ def patch_crate(cid: int, body: CratePatch) -> dict:
 
 @app.delete("/api/crates/{cid}")
 def delete_crate(cid: int) -> dict:
+    """Borra una caja o carpeta propia. Las cajas de una carpeta borrada no se pierden: vuelven a Mostrador."""
     with db.conn() as c:
+        if not c.execute("SELECT 1 FROM crates WHERE id=? AND rb_id IS NULL", (cid,)).fetchone():
+            raise HTTPException(400, "Las cajas de rekordbox, Traktor o Serato se borran en su programa (acá podés ocultarlas)")
+        c.execute("UPDATE crates SET parent_id=NULL WHERE parent_id=? AND rb_id IS NULL", (cid,))
         c.execute("DELETE FROM crates WHERE id=? AND rb_id IS NULL", (cid,))
+    return {"ok": True}
+
+
+@app.post("/api/crates/{cid}/duplicate")
+def duplicate_crate(cid: int) -> dict:
+    """Copia una caja (también una playlist importada) como caja propia, con los temas en el orden en que se ven."""
+    with db.conn() as c:
+        src = c.execute("SELECT name, kind, parent_id, query FROM crates WHERE id=?", (cid,)).fetchone()
+        if not src or src["kind"] in ("folder", "session_folder"):
+            raise HTTPException(400, "Eso no se puede duplicar")
+        smart = src["kind"] == "smart"
+        parent = src["parent_id"] if src["parent_id"] and c.execute("SELECT 1 FROM crates WHERE id=? AND kind='folder'", (src["parent_id"],)).fetchone() else None
+        cur = c.execute(
+            "INSERT INTO crates(name, kind, parent_id, query, position, source) VALUES (?,?,?,?, (SELECT COALESCE(MAX(position),0)+1 FROM crates), 'user')",
+            (f"{src['name']} (copia)", "smart" if smart else "user", parent, src["query"] if smart else None))
+        new = cur.lastrowid
+        if not smart:
+            ids = [r[0] for r in c.execute(
+                "SELECT cp.track_id FROM crate_tracks cp LEFT JOIN crate_order co ON co.crate_id=cp.crate_id AND co.track_id=cp.track_id "
+                "WHERE cp.crate_id=? ORDER BY co.position IS NULL, co.position, cp.position, cp.track_id", (cid,))]
+            c.executemany("INSERT OR IGNORE INTO crate_tracks(crate_id, track_id, position) VALUES (?,?,?)",
+                          [(new, t, i + 1) for i, t in enumerate(ids)])
+            universe.add_crate_to_active(c, new)
+        return {"id": new}
+
+
+class CrateOrder(BaseModel):
+    ids: list[int]
+
+
+@app.put("/api/crate-order")
+def order_crates(body: CrateOrder) -> dict:
+    """Orden elegido en la pantalla de Bateas para esas cajas o carpetas (el primero de la lista, primero)."""
+    with db.conn() as c:
+        c.executemany("UPDATE crates SET home_position=? WHERE id=?", [(i + 1, cid) for i, cid in enumerate(dict.fromkeys(body.ids))])
     return {"ok": True}
 
 
@@ -470,6 +529,44 @@ def add_to_crate(cid: int, body: TrackIds) -> dict:
         start = c.execute("SELECT COALESCE(MAX(position), 0) FROM crate_tracks WHERE crate_id=?", (cid,)).fetchone()[0]
         c.executemany("INSERT OR IGNORE INTO crate_tracks(crate_id, track_id, position) VALUES (?,?,?)",
                       [(cid, t, start + i + 1) for i, t in enumerate(body.track_ids)])
+    return {"ok": True}
+
+
+class TrackOrder(BaseModel):
+    track_ids: list[int]
+
+
+@app.put("/api/crates/{cid}/order")
+def reorder_crate(cid: int, body: TrackOrder) -> dict:
+    """Nuevo orden de los temas que se están viendo. Los que no se ven (filtros, universo) conservan su lugar.
+    Tus cajas guardan el orden en la caja; las playlists importadas, aparte (la próxima sincronización no lo pisa)."""
+    with db.conn() as c:
+        kind = c.execute("SELECT kind FROM crates WHERE id=?", (cid,)).fetchone()
+        if not kind or kind["kind"] not in ("user", "playlist"):
+            raise HTTPException(400, "Este tipo de caja no se puede reordenar")
+        allrows = [r["track_id"] for r in c.execute(
+            "SELECT cp.track_id FROM crate_tracks cp LEFT JOIN crate_order co ON co.crate_id=cp.crate_id AND co.track_id=cp.track_id "
+            "WHERE cp.crate_id=? ORDER BY co.position IS NULL, co.position, cp.position, cp.track_id", (cid,))]
+        inside = set(allrows)
+        ids = [i for i in dict.fromkeys(body.track_ids) if i in inside]
+        mine = set(ids)
+        it = iter(ids)
+        final = [next(it) if t in mine else t for t in allrows]
+        if kind["kind"] == "user":
+            c.executemany("UPDATE crate_tracks SET position=? WHERE crate_id=? AND track_id=?",
+                          [(i + 1, cid, t) for i, t in enumerate(final)])
+        else:
+            c.execute("DELETE FROM crate_order WHERE crate_id=?", (cid,))
+            c.executemany("INSERT INTO crate_order(crate_id, track_id, position) VALUES (?,?,?)",
+                          [(cid, t, i + 1) for i, t in enumerate(final)])
+    return {"ok": True}
+
+
+@app.delete("/api/crates/{cid}/order")
+def reset_crate_order(cid: int) -> dict:
+    """Vuelve al orden original de la playlist importada."""
+    with db.conn() as c:
+        c.execute("DELETE FROM crate_order WHERE crate_id=?", (cid,))
     return {"ok": True}
 
 
@@ -526,15 +623,29 @@ def relations_of(c, tid: int) -> list[dict]:
         """SELECT r.id, r.a, r.b, r.kind, r.source, r.count, r.note, t.id AS other_id, t.title, t.artist, t.bpm, t.key,
                   COALESCE(t.energy, t.energy_auto) AS energy, (t.artwork IS NOT NULL) AS has_art
            FROM relations r JOIN tracks t ON t.id = CASE WHEN r.a=? THEN r.b ELSE r.a END
-           WHERE (r.a=? OR r.b=?) ORDER BY (r.source='user') DESC, r.count DESC LIMIT 80""",
+           WHERE (r.a=? OR r.b=?) ORDER BY (r.source='user') DESC, r.count DESC LIMIT 200""",
         (tid, tid, tid),
     ).fetchall()
-    out = []
+    # mezclas guardadas con este tema, para abrir "Probar" con A y B en el orden en que se armaron
+    saved = {}
+    for m in c.execute("SELECT a, b FROM mix_settings WHERE a=? OR b=?", (tid, tid)):
+        saved[m["b"] if m["a"] == tid else m["a"]] = (m["a"], m["b"])
+    out: list[dict] = []
+    seen: dict[tuple[int, str], dict] = {}
     for r in rows:
         d = dict(r)
         d["direction"] = "out" if r["a"] == tid else "in"
+        d["mix"] = list(saved[r["other_id"]]) if r["other_id"] in saved and r["kind"] in ("mix", "mashup") else None
+        if r["kind"] != "history":
+            # la misma pareja puede estar marcada por vos y por un 👍 de las sugerencias: se muestra una sola vez
+            first = seen.get((r["other_id"], r["kind"]))
+            if first:
+                first["count"] += r["count"]
+                first["note"] = first["note"] or r["note"]
+                continue
+            seen[(r["other_id"], r["kind"])] = d
         out.append(d)
-    return out
+    return out[:80]
 
 
 @app.get("/api/tracks/{tid}")
@@ -638,9 +749,9 @@ def waveform(tid: int, cols: int = 720) -> dict:
         data = json.loads(cache.read_text())
     else:
         with db.conn() as c:
-            r = c.execute("SELECT anlz_dir, bpm FROM tracks WHERE id=?", (tid,)).fetchone()
+            r = c.execute("SELECT anlz_dir, bpm, duration FROM tracks WHERE id=?", (tid,)).fetchone()
         if r and r["anlz_dir"]:
-            curves = anlz.read_curves(Path(r["anlz_dir"]))
+            curves = anlz.read_curves(Path(r["anlz_dir"]), r["duration"])
             if curves is not None:
                 data = features.waveform(curves, cols)
                 if curves.downbeats is not None:
@@ -675,6 +786,11 @@ def grid(tid: int) -> dict:
     if not downbeats and r["bpm"] and r["duration"]:
         bar = 240.0 / r["bpm"]
         downbeats = [round(i * bar, 4) for i in range(int(r["duration"] / bar))]
+    with db.conn() as c:
+        mine = cues.user_grid(c, tid)
+    if mine and r["duration"]:                       # grilla corregida a mano: manda sobre cualquier otra
+        return {"bpm": mine["bpm"], "duration": r["duration"], "downbeats": cues.grid_downbeats(mine, r["duration"]), "approx": False,
+                "intro_bars": r["intro_bars"], "outro_bars": r["outro_bars"], "user": True}
     return {"bpm": r["bpm"], "duration": r["duration"], "downbeats": downbeats, "approx": approx,
             "intro_bars": r["intro_bars"], "outro_bars": r["outro_bars"]}
 
@@ -877,7 +993,12 @@ def create_relation(body: RelationIn) -> dict:
 @app.delete("/api/relations/{rid}")
 def delete_relation(rid: int) -> dict:
     with db.conn() as c:
-        c.execute("DELETE FROM relations WHERE id=? AND source NOT LIKE 'history%'", (rid,))
+        r = c.execute("SELECT a, b, kind FROM relations WHERE id=? AND source NOT LIKE 'history%'", (rid,)).fetchone()
+        if r:
+            # la pareja pudo quedar marcada dos veces (vos + un 👍): al quitarla se van las dos
+            c.execute("DELETE FROM relations WHERE a=? AND b=? AND kind=? AND source NOT LIKE 'history%'", (r["a"], r["b"], r["kind"]))
+            if r["kind"] in ("mix", "mashup"):
+                c.execute("DELETE FROM mix_settings WHERE (a=? AND b=?) OR (a=? AND b=?)", (r["a"], r["b"], r["b"], r["a"]))
     return {"ok": True}
 
 
@@ -899,6 +1020,154 @@ def feedback(body: Feedback) -> dict:
         else:
             c.execute("DELETE FROM relations WHERE a=? AND b=? AND kind IN ('mix','mashup','similar') AND source='feedback'", (a, b))
             c.execute("INSERT OR IGNORE INTO relations(a, b, kind, source) VALUES (?,?, 'avoid', 'feedback')", (a, b))
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- cues
+class CueIn(BaseModel):
+    kind: str                       # memory | hot | loop
+    slot: int | None = None         # 0..7 = pad A..H
+    start_ms: float
+    end_ms: float | None = None
+    name: str | None = None
+    rgb: list[int] | None = None
+
+
+class CuesIn(BaseModel):
+    cues: list[CueIn]
+
+
+@app.get("/api/tracks/{tid}/cues")
+def get_cues(tid: int) -> dict:
+    with db.conn() as c:
+        row = c.execute("SELECT anlz_dir, rb_id FROM tracks WHERE id=?", (tid,)).fetchone()
+        if not row:
+            raise HTTPException(404, "No existe")
+        source, mine = cues.effective(c, tid)
+        has_rb = c.execute("SELECT COUNT(*) FROM rb_cues WHERE track_id=?", (tid,)).fetchone()[0] > 0
+        return {"source": source, "cues": mine, "has_rekordbox": has_rb, "grid": cues.xml_tempo(c, tid) or cues.pqtz_segments(row["anlz_dir"]),
+                "user_grid": cues.user_grid(c, tid),
+                "from_rekordbox": row["rb_id"] is not None}
+
+
+@app.put("/api/tracks/{tid}/cues")
+def put_cues(tid: int, body: CuesIn) -> dict:
+    with db.conn() as c:
+        if not c.execute("SELECT 1 FROM tracks WHERE id=?", (tid,)).fetchone():
+            raise HTTPException(404, "No existe")
+        try:
+            cues.save_user(c, tid, [q.model_dump() for q in body.cues])
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+class GridIn(BaseModel):
+    inizio: float
+    bpm: float
+    battito: int = 1
+
+
+@app.put("/api/tracks/{tid}/grid")
+def put_grid(tid: int, body: GridIn) -> dict:
+    """Corrige la grilla del tema (tempo fijo). Se lleva al XML con "Llevar cues y grilla" y se usa al probar mezclas."""
+    with db.conn() as c:
+        if not c.execute("SELECT 1 FROM tracks WHERE id=?", (tid,)).fetchone():
+            raise HTTPException(404, "No existe")
+        try:
+            cues.save_user_grid(c, tid, body.inizio, body.bpm, body.battito)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.delete("/api/tracks/{tid}/grid")
+def reset_grid(tid: int) -> dict:
+    with db.conn() as c:
+        cues.reset_user_grid(c, tid)
+    return {"ok": True}
+
+
+@app.delete("/api/tracks/{tid}/cues")
+def reset_cues(tid: int) -> dict:
+    """Vuelve a las cues de rekordbox y descarta las editadas en Batea."""
+    with db.conn() as c:
+        cues.reset_user(c, tid)
+    return {"ok": True}
+
+
+class CuesXmlIn(BaseModel):
+    path: str
+
+
+@app.get("/api/cues/status")
+def cues_status() -> dict:
+    with db.conn() as c:
+        return cues.xml_status(c)
+
+
+@app.post("/api/cues/import-xml")
+def import_cues_xml(body: CuesXmlIn) -> dict:
+    """Trae la grilla y las cues exactas del XML que exporta rekordbox (File → Export Collection in xml format)."""
+    p = Path(body.path).expanduser()
+    if not p.is_file() or p.suffix.lower() != ".xml":
+        raise HTTPException(400, "Elegí el archivo .xml que exportó rekordbox")
+    if p.stat().st_size > 800_000_000:
+        raise HTTPException(400, "El archivo es demasiado grande")
+    with db.conn() as c:
+        if rbsync.rekordbox_available():
+            try:
+                cues.refresh_rb(c, cues.read_rb_cues(rbsync.snapshot()))     # para poder comprobar la equivalencia contra la base
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            stats = cues.import_rb_xml(c, p)
+        except (ValueError, ET.ParseError) as e:
+            raise HTTPException(400, str(e) or "No pude leer ese XML")
+        stats["mapping"] = cues.mapping_report(c)
+    return stats
+
+
+@app.post("/api/cues/refresh")
+def refresh_cues() -> dict:
+    """Lee las cues de rekordbox (de una copia de su base) para poder llevarlas intactas en el XML."""
+    if not rbsync.rekordbox_available():
+        raise HTTPException(404, "No encontré rekordbox en esta Mac")
+    rows = cues.read_rb_cues(rbsync.snapshot())
+    with db.conn() as c:
+        return cues.refresh_rb(c, rows)
+
+
+# ---------------------------------------------------------------- mezclas guardadas
+class MixSettingsIn(BaseModel):
+    settings: dict
+
+
+@app.get("/api/mixes/{a}/{b}")
+def get_mix_settings(a: int, b: int) -> dict:
+    with db.conn() as c:
+        r = c.execute("SELECT data, updated_at FROM mix_settings WHERE a=? AND b=?", (a, b)).fetchone()
+    if not r:
+        return {"saved": None}
+    try:
+        return {"saved": json.loads(r["data"]), "updated_at": r["updated_at"]}
+    except ValueError:
+        return {"saved": None}
+
+
+@app.put("/api/mixes/{a}/{b}")
+def put_mix_settings(a: int, b: int, body: MixSettingsIn) -> dict:
+    if a == b:
+        raise HTTPException(400, "Mezcla inválida")
+    data = json.dumps(body.settings)
+    if len(data) > 200_000:
+        raise HTTPException(413, "La mezcla es demasiado grande")
+    with db.conn() as c:
+        if not c.execute("SELECT COUNT(*) FROM tracks WHERE id IN (?,?)", (a, b)).fetchone()[0] == 2:
+            raise HTTPException(404, "No existe")
+        c.execute(
+            "INSERT INTO mix_settings(a, b, data) VALUES (?,?,?) "
+            "ON CONFLICT(a, b) DO UPDATE SET data=excluded.data, updated_at=CURRENT_TIMESTAMP", (a, b, data))
     return {"ok": True}
 
 
@@ -1043,6 +1312,8 @@ class ExportRunIn(BaseModel):
     target: str
     crate_ids: list[Any]
     tags_in_comment: bool = False
+    with_cues: bool = False         # llevar grilla y cues (de rekordbox o editadas en Batea) en el XML
+    keep_previous: bool = True      # rekordbox lee un solo XML: se vuelven a escribir también las cajas exportadas antes
 
 
 @app.post("/api/export")
@@ -1050,13 +1321,32 @@ def export_run(body: ExportRunIn) -> dict:
     if body.target not in export.TARGET_IDS:
         raise HTTPException(400, "Destino desconocido")
     with db.conn() as c:
-        return export.run(c, body.target, body.crate_ids, body.tags_in_comment)
+        ids = list(body.crate_ids)
+        kept = 0
+        if body.target == "rekordbox" and body.keep_previous:
+            before = [i for i in export.selection(c, "rekordbox") if i not in {str(x) for x in ids}]
+            kept = len(before)
+            ids = [*before, *ids]
+        if body.target == "rekordbox" and body.with_cues and rbsync.rekordbox_available():
+            try:
+                cues.refresh_rb(c, cues.read_rb_cues(rbsync.snapshot()))     # las cues de rekordbox tal como están ahora
+            except Exception:  # noqa: BLE001  (si no se pueden leer, se usan las últimas que se leyeron)
+                pass
+        res = export.run(c, body.target, ids, body.tags_in_comment, body.with_cues)
+        if res.get("tracks"):
+            export.record(c, body.target, ids)
+            if body.target == "rekordbox":
+                export.remember(c, "rekordbox", ids)
+        res["kept"] = kept
+        return res
 
 
 @app.post("/api/export/rekordbox")
 def export_rb(body: ExportIn) -> dict:
     with db.conn() as c:
         res = export.export(c, body.crate_ids, body.tags_in_comment)
+        if res.get("tracks"):
+            export.record(c, "rekordbox", body.crate_ids)
     return res
 
 

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { api } from '../api'
+import { api, type CueDto } from '../api'
 import { GlyphSwap } from '../lib/fluidHover'
 import { useApp } from '../store'
 import { cleanTitle, fmtBpm, parseKey } from '../util'
 import { KeyBadge, Sleeve } from './bits'
 import { IconMix, IconPause, IconPlay, IconSwap, IconThumbDown, IconThumbUp, IconX } from './icons'
 import { MixPicker } from './MixPicker'
-import { bandLane, groupOf, preset, scale, upsert, type Automation, type Held, type LaneGroup, type LaneId, type Point } from './mixlab/automation'
+import { bandLane, groupOf, parseSaved, preset, scale, upsert, type Automation, type Held, type LaneGroup, type LaneId, type Point, type SavedMix } from './mixlab/automation'
 import { CenterMixer, DeckEQ, MixHelp, Stepper, type TransitionLength } from './mixlab/Controls'
 import { Timeline, type TimelineHandle } from './mixlab/Timeline'
 import { barAt, beatAt, clamp, defaultEntry, makeDeck, phaseOffset, playbackRate, signed, type Deck, type Placement, type Side, type Transition } from './mixlab/model'
@@ -71,6 +71,11 @@ function MixInner({ a, b }: { a: number; b: number }) {
   const [group, setGroup] = useState<LaneGroup>('x')
   const [held, setHeld] = useState<Held>({})
   const [help, setHelp] = useState(false)
+  const [savedMix, setSavedMix] = useState<SavedMix | null>(null)
+  const [cuesA, setCuesA] = useState<CueDto[]>([])
+  const [cuesB, setCuesB] = useState<CueDto[]>([])
+  const [showCues, setShowCues] = useState(() => { try { return localStorage.getItem('batea.mixlab.cues') !== '0' } catch { return true } })
+  const toggleCues = (v: boolean) => { setShowCues(v); try { localStorage.setItem('batea.mixlab.cues', v ? '1' : '0') } catch { /* sin storage */ } }
   const [pickB, setPickB] = useState(false)
   const [time, setTime] = useState(0)
   const timeline = useRef<TimelineHandle>(null)
@@ -82,11 +87,26 @@ function MixInner({ a, b }: { a: number; b: number }) {
   useEffect(() => {
     let alive = true
     Promise.all([api.track(a), api.track(b), api.grid(a), api.grid(b),
-      api.waveform(a, 2400).catch(() => null), api.waveform(b, 2400).catch(() => null)])
-      .then(([ta, tb, ga, gb, wa, wb]) => {
+      api.waveform(a, 2400).catch(() => null), api.waveform(b, 2400).catch(() => null),
+      api.mixSettings(a, b).then((r) => parseSaved(r.saved)).catch(() => null),
+      api.cues(a).then((r) => r.cues).catch(() => [] as CueDto[]), api.cues(b).then((r) => r.cues).catch(() => [] as CueDto[])])
+      .then(([ta, tb, ga, gb, wa, wb, saved, ca, cb]) => {
         if (!alive) return
+        setCuesA(ca); setCuesB(cb)
         const A = makeDeck(ta, ga, wa), B = makeDeck(tb, gb, wb)
-        setPlacement({ ...INITIAL_PLACEMENT, mixBar: defaultEntry(A) })
+        if (saved) {
+          // la mezcla que dejaste armada: mismas posiciones y curvas (acotadas por si la grilla cambió)
+          setPlacement({
+            mixBar: clamp(Math.round(saved.mixBar), 0, A.db.length - 1),
+            startBar: clamp(Math.round(saved.startBar), 0, B.db.length - 1),
+            nudge: clamp(saved.nudge, -4 * A.bar, 4 * A.bar),
+          })
+          setStyle(saved.style)
+          setLength(([8, 16, 32, 64].includes(saved.length) ? saved.length : 16) as TransitionLength)
+          setAutomation(saved.automation)
+          setCustom(saved.custom)
+          setSavedMix(saved)
+        } else setPlacement({ ...INITIAL_PLACEMENT, mixBar: defaultEntry(A) })
         setDecks({ A, B })
       })
       .catch((e: Error) => { if (alive) setError(e.message) })
@@ -283,8 +303,14 @@ function MixInner({ a, b }: { a: number; b: number }) {
       : `B entra ${A.db.length - mixBar} compases antes del final de A${startBar ? `, desde su compás ${startBar + 1}` : ''}${phase}`
     try {
       await api.relate(a, b, kind, note)
+      if (kind !== 'avoid') {
+        // también la mezcla en sí, para encontrarla armada al volver a abrirla
+        const mixState: SavedMix = { v: 1, mixBar, startBar, nudge, style, length, custom, automation }
+        await api.saveMixSettings(a, b, mixState as unknown as Record<string, unknown>)
+        setSavedMix(mixState)
+      }
       bump()
-      toast({ mix: 'Guardé el punto de mezcla', mashup: 'Guardado como mashup', avoid: 'Guardado. No voy a sugerir esta mezcla.' }[kind])
+      toast({ mix: 'Guardé la mezcla', mashup: 'Guardada como mashup, con la mezcla', avoid: 'Guardado. No voy a sugerir esta mezcla.' }[kind])
     } catch (e) { toast((e as Error).message, 'error') }
   }
 
@@ -313,13 +339,18 @@ function MixInner({ a, b }: { a: number; b: number }) {
 
         <Timeline ref={timeline} A={A} B={B} timing={timing} placement={placement} rate={rate} style={style}
           automation={automation} group={group} setGroup={setGroup} onAutomation={editCurve}
-          peaksA={media.A.peaks} peaksB={media.B.peaks} onSeek={seek} onPlacement={setPlacementPatch} />
+          peaksA={media.A.peaks} peaksB={media.B.peaks} cuesA={cuesA} cuesB={cuesB} showCues={showCues} onSeek={seek} onPlacement={setPlacementPatch} />
 
         <div className="mx-transport">
           <button className="playbtn" disabled={!canPlay} onClick={toggle} aria-label={playing ? 'Pausar mezcla' : 'Reproducir mezcla'}>
             <GlyphSwap on={playing} a={<IconPlay size={16} />} b={<IconPause size={16} />} />
           </button>
           <button className="btn sm" onClick={() => seekVisible(A.db[Math.max(0, mixBar - 8)])}>Ir 8 compases antes</button>
+          {(cuesA.length > 0 || cuesB.length > 0) && (
+            <label className="ce-check" title="Muestra las hot cues, memory cues y loops de A y de B en la línea de tiempo">
+              <input type="checkbox" checked={showCues} onChange={(e) => toggleCues(e.target.checked)} /> Mostrar cues
+            </label>
+          )}
           <span className={`mx-status ellipsis${audioError ? ' error' : ''}`} title={status}>{status}</span>
           <div className="mx-transport-end">
             {(A.g.approx || B.g.approx) && <span className="mx-grid-source" title={`Batea calculó la grilla de ${A.g.approx && B.g.approx ? 'A y B' : A.g.approx ? 'A' : 'B'}`}>Grilla estimada</span>}
@@ -363,7 +394,7 @@ function MixInner({ a, b }: { a: number; b: number }) {
         </div>
 
         <div className="mx-verdict">
-          <span className="muted">Guardar relación</span>
+          <span className="muted">{savedMix ? 'Mezcla guardada' : 'Guardar relación'}</span>
           <button className="btn" onClick={() => void save('avoid')}><IconThumbDown size={14} /> No van</button>
           <button className="btn" onClick={() => void save('mashup')}>Funciona como mashup</button>
           <button className="btn primary" onClick={() => void save('mix')}><IconThumbUp size={14} /> Mezclan bien</button>

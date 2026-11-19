@@ -2,11 +2,13 @@ import { useEffect } from 'react'
 import { spring, usePresence } from '../lib/motion'
 import { useApp, type SettingsTab } from '../store'
 import { AgentsPanel } from './Agents'
+import { AboutPanel } from './About'
 import { SourcesPanel } from './Sources'
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'programs', label: 'Programas' },
   { id: 'agents', label: 'Agentes de IA' },
+  { id: 'about', label: 'Acerca de' },
 ]
 
 /** Popup de Ajustes: los programas de DJ que lee Batea y la conexión con agentes de IA. */
@@ -38,7 +40,7 @@ export function SettingsDialog() {
           </div>
         </div>
         <div className="settings-body" role="tabpanel">
-          {tab === 'programs' ? <SourcesPanel /> : <AgentsPanel />}
+          {tab === 'programs' ? <SourcesPanel /> : tab === 'agents' ? <AgentsPanel /> : <AboutPanel />}
         </div>
         <div className="settings-foot">
           <button className="btn primary sm" onClick={() => setSettings(null)}>Listo</button>
