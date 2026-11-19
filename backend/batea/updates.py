@@ -113,7 +113,8 @@ def check(force: bool = False) -> dict:
         _last = evaluate(None)
         return {**_last, "checked_at": None, "online": None}
     cached = _load()
-    stale = not cached or force or time.time() - float(cached.get("fetched_at", 0)) > FRESH_FOR
+    # con una dirección de prueba (BATEA_UPDATE_URL) siempre se lee: la respuesta guardada puede ser la real
+    stale = not cached or force or bool(os.environ.get("BATEA_UPDATE_URL")) or time.time() - float(cached.get("fetched_at", 0)) > FRESH_FOR
     data = cached["data"] if cached else None
     online: bool | None = None
     checked = cached.get("fetched_at") if cached else None
