@@ -3,6 +3,29 @@
 Cada vez que se arma un instalador nuevo se sube la versión (`./scripts/release.sh bump patch|minor|major`)
 y se anota acá, en lenguaje de quien usa Batea, qué cambió. Lo más nuevo arriba.
 
+## 0.4.0 — 2026-11-19
+
+**Cues y grilla**
+- Editor de cues: hot cues A–H, memory cues y loops, sobre una onda a nivel de muestra con zoom continuo (hasta menos de 1 ms por píxel), pegado al beat y ajuste fino de cada cue. Los loops repiten mientras están activos. Se abre desde la ficha del tema («Cues…») o con clic derecho.
+- Grilla corregible: «Este es el 1», correr de a milisegundos (también arrastrando con Mayús), BPM, ½ y 2×. La grilla corregida se usa también al probar mezclas.
+- Las cues se ven en la onda del reproductor, en el detalle del tema y en «Probar mezcla» (con un interruptor para ocultarlas).
+- Llevar cues y grilla a rekordbox en el XML (opción «Llevar cues y grilla», en prueba). Para que los temas de rekordbox salgan con su grilla exacta, en Ajustes → Programas se trae el XML que exporta rekordbox (File → Export Collection in xml format).
+
+**Bateas**
+- Reordenar arrastrando (las tarjetas, y los temas de una lista, también en las playlists de rekordbox), estantes que se pliegan, carpetas y cajas nuevas desde cada estante, y clic derecho en cajas y carpetas (renombrar, mover, duplicar, ocultar, borrar, exportar).
+- Las cajas tuyas muestran si todavía no se exportaron a rekordbox o si cambiaron después de exportarlas, con un botón para exportar las pendientes.
+- Exportar a rekordbox ya no pierde las cajas exportadas antes: el archivo lleva todas.
+
+**Reproducción**
+- La posición del cabezal sigue al audio cuadro a cuadro y coincide con la onda; en los MP3, hacer clic en la onda salta a la posición exacta.
+- Pistas similares: el play ya no cambia la ficha abierta. En el reproductor, el título y el artista abren su ficha y sus temas.
+
+**Probar mezcla**
+- «Mezclan bien» guarda la mezcla completa (entrada, cue, fase, curvas) y al reabrirla queda armada. Una pareja marcada dos veces ya no aparece repetida.
+
+**Además**
+- La versión se ve bajo el logo y hay una pestaña «Acerca de» en Ajustes, con «Comprobar actualizaciones» y la presentación («Ver la presentación» se mudó acá).
+
 ## 0.3.1 — 2026-11-18
 
 - Arreglo: después de actualizar, Batea podía seguir mostrando la interfaz de la versión anterior (macOS la guardaba en caché). Ahora siempre carga la de la versión instalada.
