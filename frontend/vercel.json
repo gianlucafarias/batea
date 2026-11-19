@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "devCommand": "npm run dev:landing -- --port $PORT --strictPort",
+  "buildCommand": "npm run build:landing",
+  "outputDirectory": "landing/dist"
+}

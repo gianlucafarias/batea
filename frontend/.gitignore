@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Salida web de la landing
+/.vercel/
+!.env.example

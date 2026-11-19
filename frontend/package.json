@@ -7,14 +7,19 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:landing": "vite --config vite.landing.config.ts",
+    "build:landing": "tsc -b tsconfig.landing.json && vite build --config vite.landing.config.ts",
+    "preview:landing": "vite preview --config vite.landing.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource/permanent-marker": "^5.3.0",
+    "@marsidev/react-turnstile": "^1.6.3",
     "@tanstack/react-virtual": "^3.14.26",
     "d3-force-3d": "^3.0.6",
+    "google-auth-library": "^10.9.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "three": "^0.187.0",
