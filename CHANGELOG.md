@@ -3,6 +3,13 @@
 Cada vez que se arma un instalador nuevo se sube la versión (`./scripts/release.sh bump patch|minor|major`)
 y se anota acá, en lenguaje de quien usa Batea, qué cambió. Lo más nuevo arriba.
 
+## 0.4.1 — 2026-11-19
+
+**Actualizar sin salir de Batea**
+- Cuando hay una versión nueva aparece un cuadro arriba a la derecha, con las novedades. «Actualizar» la baja, comprueba que sea la app original de Batea (firma de Apple, versión y autor) y la deja lista; «Reiniciar ahora» la instala y vuelve a abrir Batea. Tu librería y tus datos no se tocan.
+- También se puede hacer desde Ajustes → Acerca de. Si Batea está en una carpeta donde no puede reemplazarse sola, ofrece la descarga a mano.
+- Se quitó el aviso de la barra lateral.
+
 ## 0.4.0 — 2026-11-19
 
 **Cues y grilla**
