@@ -1305,15 +1305,16 @@ kbd {
 .ce-timein { width: 104px; height: 26px; padding: 0 6px; text-align: center; font-size: 13px; }
 
 /* ------------------------------------------------------------------ aviso de actualización */
-.update-card { position: fixed; top: 16px; right: 18px; z-index: 150; width: 372px; display: flex; align-items: flex-start; gap: 12px; padding: 14px 14px 14px 16px;
+.update-card { position: fixed; top: 16px; right: 18px; z-index: 150; width: 372px; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 14px 16px;
   background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: 0 18px 40px -12px rgba(0,0,0,0.65);
   animation: uc-in var(--moderate) var(--ease) both; }
 .update-card.ready { border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2)); }
 .update-card.error { border-color: color-mix(in srgb, #ef7a6b 45%, var(--line-2)); }
 @keyframes uc-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
-.uc-body { flex: 1; min-width: 0; display: grid; gap: 5px; font-size: 13px; line-height: 1.45; }
+.uc-body { min-width: 0; display: grid; gap: 5px; font-size: 13px; line-height: 1.45; padding-right: 26px; }
+.uc-close { position: absolute; top: 8px; right: 8px; }
 .uc-body b { font-size: 14px; }
-.uc-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.uc-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .uc-link { justify-self: start; font-size: 12px; color: var(--accent); }
 .uc-link:hover { text-decoration: underline; text-underline-offset: 2px; }
 .uc-notes { max-height: 180px; overflow-y: auto; white-space: pre-line; font-size: 12px; color: var(--text-2); padding: 8px 10px; border-radius: 8px; background: var(--bg-2); }

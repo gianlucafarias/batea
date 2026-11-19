@@ -23,6 +23,7 @@ export function UpdateCard() {
   const pct = Math.round(st.progress * 100)
   return (
     <div className={`update-card${ready ? ' ready' : st.state === 'error' ? ' error' : ''}`} role="status" aria-live="polite">
+      {!busy && !restarting && <button className="btn ghost sm icon uc-close" aria-label="Más tarde" title="Más tarde" onClick={later}><IconX size={14} /></button>}
       <div className="uc-body">
         {st.state === 'idle' && (
           <>
@@ -74,7 +75,6 @@ export function UpdateCard() {
             <button className="btn primary sm" onClick={manual}>Descargar a mano</button>
           </>
         )}
-        {!busy && !restarting && <button className="btn ghost sm icon" aria-label="Más tarde" title="Más tarde" onClick={later}><IconX size={14} /></button>}
       </div>
     </div>
   )
