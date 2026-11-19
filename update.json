@@ -1,10 +1,10 @@
 {
-  "version": "0.4.0",
+  "version": "0.4.1",
   "min_version": "0.3.1",
-  "notes": "· Editor de cues: hot cues A–H, memory cues y loops, sobre una onda a nivel de muestra con zoom continuo (hasta…\n· Grilla corregible: «Este es el 1», correr de a milisegundos (también arrastrando con Mayús), BPM, ½ y 2×\n· Las cues se ven en la onda del reproductor, en el detalle del tema y en «Probar mezcla» (con un interruptor…\n· Llevar cues y grilla a rekordbox en el XML (opción «Llevar cues y grilla», en prueba)",
-  "page": "https://github.com/gianlucafarias/batea/releases/tag/v0.4.0",
+  "notes": "· Cuando hay una versión nueva aparece un cuadro arriba a la derecha, con las novedades\n· También se puede hacer desde Ajustes → Acerca de\n· Se quitó el aviso de la barra lateral",
+  "page": "https://github.com/gianlucafarias/batea/releases/tag/v0.4.1",
   "downloads": {
-    "arm64": "https://github.com/gianlucafarias/batea/releases/download/v0.4.0/Batea-0.4.0-arm64.dmg",
-    "x86_64": "https://github.com/gianlucafarias/batea/releases/download/v0.4.0/Batea-0.4.0-x86_64.dmg"
+    "arm64": "https://github.com/gianlucafarias/batea/releases/download/v0.4.1/Batea-0.4.1-arm64.dmg",
+    "x86_64": "https://github.com/gianlucafarias/batea/releases/download/v0.4.1/Batea-0.4.1-x86_64.dmg"
   }
 }
