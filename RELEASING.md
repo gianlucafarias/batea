@@ -4,7 +4,39 @@ Guía para que **los dos instaladores (Apple Silicon e Intel) salgan siempre del
 cuando se agregan funciones. Todo está pensado para que lo pueda hacer una persona sin acordarse de nada: los scripts
 avisan cuando algo quedó desactualizado.
 
-## Preparar una nueva versión
+## Armar en GitHub (lo habitual desde la 0.5.0)
+
+`.github/workflows/release.yml` («Armar instaladores») corre el mismo `scripts/make_dist.sh` en Macs de GitHub: Apple Silicon
+(`macos-15`, con Essentia) e Intel (`macos-15-intel`, nativo, así el selftest corre en un Intel real y no bajo Rosetta). Tarda
+unos 11 minutos con los dos en paralelo y no usa tu Mac. Es gratis porque el repositorio es público.
+
+1. `./scripts/release.sh bump minor` (o `patch`), completar `CHANGELOG.md`, commit y push a `main` (solo la app: la landing va a batea-web).
+2. GitHub → Actions → **Armar instaladores** → Run workflow, con **publicar** marcado
+   (`gh workflow run release.yml -f publicar=true`). Sin «publicar» deja los `.dmg` solo como artefactos de la ejecución.
+3. Queda el release `v<versión>` como **borrador** con los dos `.dmg` (notas = la sección del CHANGELOG). Revisarlo:
+   descargar los `.dmg` y comprobar `spctl -a -t open --context context:primary-signature -vv` («Notarized Developer ID»),
+   `xcrun stapler validate`, y que la huella de cada `.build.json` (artefactos de la ejecución) sea la de `release.sh status`.
+4. Publicarlo: `gh release edit v<versión> --draft=false --latest`.
+5. Si es obligatoria, `./scripts/release.sh require`; si no, `python3 scripts/update_manifest.py`. Commit y push de
+   `update.json` (y `MIN_VERSION`) **al final**.
+
+Secretos del repositorio (Settings → Secrets and variables → Actions):
+
+| Secreto | Qué es |
+|---|---|
+| `MACOS_CERT_P12` | El certificado «Developer ID Application» + su clave + el intermedio de Apple «Developer ID Certification Authority» (G2), como `.p12` en base64. Exportado con cifrado 3DES/SHA1 (`openssl pkcs12 -export -legacy -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1`) para que `security import` lo acepte. |
+| `MACOS_CERT_PASSWORD` | La contraseña de ese `.p12`. |
+| `NOTARY_APPLE_ID`, `NOTARY_APP_PASSWORD` | Apple ID y contraseña específica de app (account.apple.com) para `notarytool`. También acepta una API key de App Store Connect: `NOTARY_KEY_P8` (base64), `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID`. |
+
+El certificado vence el 17/12/2027: antes hay que renovarlo en developer.apple.com y volver a cargar `MACOS_CERT_P12`.
+En macOS nuevos la app Contraseñas no muestra certificados: exportarlo con Acceso a Llaveros
+(`/System/Library/CoreServices/Applications/Keychain Access.app`) o con `security export -t identities` y quedarse
+solo con la identidad Developer ID.
+
+Las Macs de GitHub traen un Python más nuevo que el que soporta Essentia (solo 3.12 y 3.13): el workflow fija
+`UV_PYTHON=3.12`. Si una ejecución falla, los registros de PyInstaller y del selftest quedan como artefactos `logs-<arch>`.
+
+## Preparar una nueva versión (en tu Mac, como respaldo)
 
 ```sh
 ./scripts/release.sh status        # ¿los instaladores corresponden al código actual?  (no arma nada)
@@ -238,12 +270,13 @@ BATEA_HOME=/tmp/batea-prueba BATEA_RB_DIR=/tmp/sin-rekordbox BATEA_AUTODISCOVER=
 Variables útiles: `BATEA_HOME` (dónde guarda sus datos), `BATEA_RB_DIR` (dónde busca rekordbox), `BATEA_AUTODISCOVER=0`
 (no busca música sola), `BATEA_PORT` (con `--server`), `BATEA_NO_MENUBAR=1` (sin ícono de la barra).
 
-## Qué se probó y qué no (a 2026-11-17)
+## Qué se probó y qué no (a 2026-11-23)
 
 - ✓ Apple Silicon: `--selftest` empaquetado completo (análisis, tonalidad con Essentia, arranque sin rekordbox, MCP, links).
-- ✓ Intel: el mismo `--selftest`, pero **bajo Rosetta** (no en una Mac Intel real) y sin Essentia (se cuelga bajo Rosetta).
+- ✓ Intel: el mismo `--selftest` en una **Mac Intel real** (GitHub Actions, desde la 0.5.0) y antes bajo Rosetta. Sin Essentia (se colgaba bajo Rosetta; no se volvió a probar en Intel real).
+- ✓ Notarización y firma Developer ID de la app y del `.dmg`, armados en tu Mac y en GitHub (0.5.0: `spctl` «Notarized Developer ID» y `stapler validate` en los dos).
 - ✗ No probado: abrir la ventana desde el `.dmg` en otra Mac, el ícono de la barra empaquetado, un click real en un link
-  `batea://`, arrastrar temas a rekordbox, la notarización.
+  `batea://`, arrastrar temas a rekordbox.
 - Antes de entregar una versión a alguien, probarla una vez en una Mac que no sea la de desarrollo.
 
 ## Instalar el instalador en tu propia Mac (reemplazar la app de desarrollo)
@@ -278,4 +311,6 @@ Sirve para probar exactamente lo que recibe otra persona.
 - **`parity` falla:** una dependencia está en `pyproject.toml` pero no en `requirements-intel.in` (o al revés).
 - **Falla la prueba del paso 7 y no se genera el `.dmg`:** el detalle queda en `build/<arch>/selftest.log`.
 - **Intel no resuelve dependencias:** probablemente una librería nueva sin binario para x86_64 (ver reglas de dependencias).
-- **El disco se llena:** borrar `build/` y `release/archive/`.
+- **El disco se llena:** borrar `build/` y `release/archive/`. Con el armado en GitHub, `build/` ya no hace falta en tu Mac.
+- **En GitHub falla «Entorno de Python» con Essentia:** el runner trae un Python sin wheels de Essentia; revisar que siga `UV_PYTHON=3.12`.
+- **En GitHub falla la firma («no trae Developer ID»):** el `.p12` del secreto no tiene la identidad o la clave; volver a exportarlo (ver «Armar en GitHub»).

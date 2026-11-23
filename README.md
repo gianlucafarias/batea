@@ -13,9 +13,9 @@ Crea `~/Applications/Batea.app`. Requiere `uv` (Homebrew) y Node 18+.
 ## Cómo se conecta con rekordbox
 
 - **Lee** una copia de `~/Library/Pioneer/rekordbox/master.db`: temas, BPM, tonalidad, puntajes, colores, My Tags, playlists e historial de sesiones. **Nunca escribe** en la base de rekordbox.
-- **Lee las waveforms** de `rekordbox/share/PIONEER/USBANLZ` (están en la Mac, no en el disco de música). De ahí salen la energía estimada, el largo de intro y outro en compases y los breaks, aunque el disco con los archivos esté desconectado.
+- **Lee las waveforms** de `rekordbox/share/PIONEER/USBANLZ` (están en la Mac, no en el disco de música). De ahí salen la energía estimada, el largo de intro y outro en compases y los breaks, aunque el disco con los archivos esté desconectado. La energía de los temas que analiza Batea (fuera de rekordbox) se traduce a la misma escala (`features.AUDIO_TO_ANLZ`, medido en 80 temas analizados de las dos formas), así se comparan entre sí.
 - **Exporta** a rekordbox con un XML (`~/Music/Batea/batea.xml`), el camino oficial: Preferencias → Avanzado → Base de datos → rekordbox xml.
-- El **historial** de sesiones se convierte en relaciones “lo tocaste seguido de…”, que alimentan las recomendaciones.
+- El **historial** de sesiones se convierte en relaciones “lo tocaste seguido de…”, que alimentan las recomendaciones. Cada sesión guarda además lo que sonó en orden y con los temas que volviste a poner (`session_plays`), que es lo que usan el gráfico y las estadísticas.
 
 ## Música que todavía no pasó por rekordbox
 
@@ -45,7 +45,7 @@ Al lado está la *Rueda Camelot* plana de siempre (`components/CamelotWheel.tsx`
 
 ## Universos
 
-Un universo limita todo Batea (bateas, mapa, sugerencias, sin clasificar, completar tonalidades) a las playlists y carpetas que elijas. Se crea desde el selector de arriba a la izquierda. No borra nada: “Toda la librería” vuelve a mostrar todo. El estilo de mezcla que aprende Batea se calcula dentro del universo activo.
+Un universo limita todo Batea (bateas, mapa, sugerencias, sin clasificar, completar tonalidades) a las playlists y carpetas que elijas. Las sesiones del historial son la excepción: al abrir una se ve completa, porque es lo que tocaste esa noche. Se crea desde el selector de arriba a la izquierda. No borra nada: “Toda la librería” vuelve a mostrar todo. El estilo de mezcla que aprende Batea se calcula dentro del universo activo.
 
 ## Etiquetado rápido
 
@@ -53,7 +53,15 @@ Un universo limita todo Batea (bateas, mapa, sugerencias, sin clasificar, comple
 
 ## Probar la mezcla
 
-Desde la ficha de un tema (sugerencias y relaciones) o con dos temas seleccionados. Los dos temas se decodifican a memoria y suenan con Web Audio sobre el mismo reloj, alineados por la grilla de compases: B suena a la velocidad de A (con pitch, como un CDJ sin Master Tempo). Se elige en qué compás entra B, desde qué compás arranca y la fase; la mezcla automática cruza los volúmenes y cambia los graves a mitad del solape. El veredicto (mezclan bien / mashup / no van) se guarda como relación con el punto de mezcla anotado. La sincronía es tan buena como las grillas: si un bombo cae corrido, se corrige con “Fase de B”.
+Desde la ficha de un tema (sugerencias y relaciones) o con dos temas seleccionados. Los dos temas se decodifican a memoria y suenan con Web Audio sobre el mismo reloj, alineados por la grilla de compases. Cada bandeja tiene tempo y tono; con «Sync» B sigue el tempo de A, y con «Master tempo» (por defecto) cambiar el tempo no cambia el tono (`mixlab/stretch.ts`, en un worker). Sin master tempo suena como un vinilo. Se elige en qué compás entra B, desde qué compás arranca y la fase; la mezcla automática cruza los volúmenes y cambia los graves a mitad del solape. El veredicto (mezclan bien / mashup / no van) se guarda como relación con el punto de mezcla anotado. La sincronía es tan buena como las grillas: si un bombo cae corrido, se corrige con “Fase de B”.
+
+## Gráfico de la caja
+
+«Ver gráfico» en cualquier caja o sesión: la energía de cada tema (con decimales y el eje acercado al rango del set), las fases warm-up / subida / peak / cierre, el BPM en escalones y el tono de cada pasada (compatible, arriesgada o choque). Sigue siempre el orden real: el de la caja o, en una sesión, lo que sonó; nunca la columna por la que esté ordenada la lista. Debajo, «Para revisar» lista saltos de tempo, choques de tono, caídas de energía, pasadas con poco margen, pasadas marcadas para evitar, peak muy temprano y tramos planos. Cada pasada ofrece «Tema puente» y «Reemplazar»: temas que entran bien de los dos lados por tempo (hasta 6% por lado) y tono, sacados del mismo motor que las sugerencias (`setinsights.suggest_between`); en tus cajas se agregan con un clic. En tus cajas y playlists se puede arrastrar un tema dentro del gráfico y todo se recalcula mientras se mueve. Hasta 150 temas.
+
+## Tus sesiones
+
+Ícono al lado de «Historial de sesiones»: curva de energía típica de tus sesiones (mediana y la franja de la mitad), en qué momento llega tu peak, sesiones y BPM mes a mes, temas de peak, con qué abrís y cerrás, pasadas que más repetís y temas que tocabas seguido y ya no. Por año, con todo el historial o solo con las sesiones de tu universo (`setinsights.session_stats`, `GET /api/sessions/stats`).
 
 ## Completar tonalidades
 
@@ -95,6 +103,9 @@ cd backend && uv run python -m batea.main            # ventana nativa (usa front
 | Energía / intro / outro / breaks | `backend/batea/features.py` |
 | Análisis de audio propio | `backend/batea/analysis.py` |
 | Recomendaciones y estilo aprendido | `backend/batea/recommend.py` |
+| Tema puente / reemplazo, estadísticas del historial | `backend/batea/setinsights.py` |
+| Gráfico de la caja | `frontend/src/components/SetChart.tsx`, `frontend/src/lib/setAnalysis.ts` |
+| Tus sesiones | `frontend/src/components/SessionsStats.tsx` |
 | Exportación XML | `backend/batea/export.py` |
 | Batea 3D | `frontend/src/components/Digger.tsx` |
 | Mapa | `frontend/src/components/MapView.tsx` |
@@ -103,6 +114,10 @@ cd backend && uv run python -m batea.main            # ventana nativa (usa front
 ## Instalarla en otras Macs
 
 > Flujo completo de versiones, qué revisar al agregar funciones y cómo no dejar instaladores viejos: **[RELEASING.md](RELEASING.md)**. Historial: [CHANGELOG.md](CHANGELOG.md).
+
+**En GitHub (lo habitual desde la 0.5.0):** Actions → «Armar instaladores» → Run workflow (con «publicar» marcado). Arma Apple Silicon e Intel en Macs de GitHub, cada uno en su arquitectura, firmados y notarizados, y los deja en un release borrador. No usa tu Mac. Ver «Armar en GitHub» en `RELEASING.md`.
+
+**En tu Mac (respaldo):**
 
 ```sh
 ./scripts/release.sh status      # ¿los instaladores corresponden al código actual?
