@@ -48,10 +48,14 @@ jobs:
       SIGN_ID: "Developer ID Application: Gianluca Palmier (J96S7CUHS9)"
       NOTARY_PROFILE: batea-notary
       TEAM_ID: J96S7CUHS9
+      # el Python de la app empaquetada: Essentia solo trae wheels para 3.12/3.13, y las Macs de GitHub vienen con uno más nuevo
+      UV_PYTHON: "3.12"
     steps:
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
 
       - uses: actions/setup-node@v4
         with:
