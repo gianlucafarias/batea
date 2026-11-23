@@ -1,10 +1,10 @@
 {
-  "version": "0.4.1",
-  "min_version": "0.3.1",
-  "notes": "· Cuando hay una versión nueva aparece un cuadro arriba a la derecha, con las novedades\n· También se puede hacer desde Ajustes → Acerca de\n· Se quitó el aviso de la barra lateral",
-  "page": "https://github.com/gianlucafarias/batea/releases/tag/v0.4.1",
+  "version": "0.5.0",
+  "min_version": "0.5.0",
+  "notes": "· «Ver gráfico» en cualquier caja o sesión del historial: la energía de cada tema con warm-up, subida, peak y…\n· Debajo, «Para revisar»: saltos de tempo, choques de tono, caídas bruscas de energía, pasadas con poco margen…\n· En cada pasada con problemas: «Tema puente» (temas que entran bien entre los dos, por tempo y tono de los dos…\n· Arrastrá un tema dentro del gráfico para moverlo: la curva, las fases y los avisos se recalculan mientras lo…",
+  "page": "https://github.com/gianlucafarias/batea/releases/tag/v0.5.0",
   "downloads": {
-    "arm64": "https://github.com/gianlucafarias/batea/releases/download/v0.4.1/Batea-0.4.1-arm64.dmg",
-    "x86_64": "https://github.com/gianlucafarias/batea/releases/download/v0.4.1/Batea-0.4.1-x86_64.dmg"
+    "arm64": "https://github.com/gianlucafarias/batea/releases/download/v0.5.0/Batea-0.5.0-arm64.dmg",
+    "x86_64": "https://github.com/gianlucafarias/batea/releases/download/v0.5.0/Batea-0.5.0-x86_64.dmg"
   }
 }
