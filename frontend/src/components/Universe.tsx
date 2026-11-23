@@ -21,7 +21,7 @@ export function UniverseSwitcher() {
   if (!universes) return null
   const active = universes.items.find((u) => u.id === universes.active)
   return (
-    <div className="uni" ref={ref}>
+    <div className="uni" data-tour="universe" ref={ref}>
       <button className="uni-btn" onClick={() => setOpen(!open)} title="Qué parte de la librería ves" aria-expanded={open}>
         <span style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
           <span className="uni-label">Universo</span>

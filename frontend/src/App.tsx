@@ -1,3 +1,4 @@
+import { SessionsStats } from './components/SessionsStats'
 import { SettingsDialog } from './components/Settings'
 import { useCallback, useEffect, useState } from 'react'
 import { CrateView } from './components/CrateView'
@@ -17,6 +18,7 @@ import { Sidebar } from './components/Sidebar'
 import { TrackPanel } from './components/TrackPanel'
 import { Splash, Welcome } from './components/Welcome'
 import { UpdateScreen } from './components/Update'
+import { Tour, tourSeen } from './components/Tour'
 import { api } from './api'
 import { drainLinks } from './links'
 import { isActiveJob } from './sources'
@@ -51,6 +53,13 @@ export default function App() {
       .catch(() => useApp.setState({ bootError: true }))
   }, [loadMeta, trackJob])
   useEffect(() => { boot() }, [boot])
+
+  // recorrido guiado: una sola vez, al entrar a la app (después de la bienvenida, si la hubo)
+  useEffect(() => {
+    if (!booted || welcome || update?.must_update || tourSeen()) return
+    const t = window.setTimeout(() => useApp.getState().setTour(true), 900)
+    return () => window.clearTimeout(t)
+  }, [booted, welcome, update?.must_update])
 
   // Arrastrar archivos o carpetas a la ventana: la app nativa recibe las rutas y Batea los trae
   const [dragging, setDragging] = useState(false)
@@ -135,12 +144,13 @@ export default function App() {
   return (
     <div className="app">
       <Sidebar />
-      <main className="main">
+      <main className="main" data-tour="tracks">
         {view === 'home' && <Home />}
         {view === 'crate' && <CrateView />}
         {view === 'map' && <MapScreen />}
         {view === 'inbox' && <Inbox />}
         {view === 'tagger' && <Tagger />}
+        {view === 'sessions' && <SessionsStats />}
       </main>
       <div className="panel-slot">
         {panelId != null && <div className={`tpanel-anim${panelClosing ? ' closing' : ''}`}><TrackPanel id={panelId} /></div>}
@@ -157,6 +167,7 @@ export default function App() {
       <CueEditor />
       <UpdateCard />
       <EditTrackDialog />
+      <Tour />
       <Toasts />
       {dragging && <div className="drop-ov"><div><h2>Soltá para traer a Batea</h2><div className="muted">Temas sueltos o carpetas enteras. Batea reconoce los temas que ya están en la librería.</div></div></div>}
     </div>

@@ -15,12 +15,16 @@ export function Inbox() {
 
   useEffect(() => { api.tracks('local').then(setLocal).catch(() => {}) }, [libraryVersion])
   useEffect(() => { api.keyStatus().then(setKs).catch(() => {}) }, [libraryVersion])
+  const [old, setOld] = useState<{ count: number; online: number } | null>(null)
+  useEffect(() => { api.analyzeOutdated().then(setOld).catch(() => {}) }, [libraryVersion])
+  const analyzing = jobs.some((j) => j.kind === 'analyze' && j.status === 'running')
 
   return (
     <>
       <header className="viewhead">
         <div>
           <h1>Analizar e importar</h1>
+          <div className="sub">Traé tu librería, encontrá música que no está en tu programa de DJ y analizala (BPM, tono, energía).</div>
         </div>
       </header>
       <div className="inbox">
@@ -45,15 +49,35 @@ export function Inbox() {
           </div>}
         </div>
 
+        {old && old.count > 0 && (
+          <div className="card reanalyze">
+            <h3>Mejoramos el análisis de BPM</h3>
+            <p>
+              El análisis anterior se equivocaba en temas rápidos o con percusión en tresillo: daba 112 o 95 en temas de 140.
+              {' '}{old.count.toLocaleString('es-AR')} {old.count === 1 ? 'tema tuyo se analizó' : 'temas tuyos se analizaron'} con esa versión.
+            </p>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button className="btn primary" disabled={!old.online || analyzing} onClick={async () => {
+                try { trackJob(await api.reanalyzeOutdated()); setOld({ ...old, online: 0 }) } catch (e) { toast((e as Error).message, 'error') }
+              }}>Reanalizar {old.online.toLocaleString('es-AR')} {old.online === 1 ? 'tema' : 'temas'}</button>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {old.online < old.count ? `${(old.count - old.online).toLocaleString('es-AR')} están en un disco desconectado. ` : ''}De a uno por vez; podés seguir usando Batea.
+              </span>
+            </div>
+          </div>
+        )}
+
         <FoundMusic />
 
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
             <h3>Completar tonalidades</h3>
-            {ks && <span className="muted num">{ks.missing.toLocaleString('es-AR')} sin tono de {ks.total.toLocaleString('es-AR')}{status?.universe ? ` en ${status.universe.name}` : ''}</span>}
+            {ks && <span className="muted num">{(ks.missing - (ks.outdated ?? 0)).toLocaleString('es-AR')} sin tono de {ks.total.toLocaleString('es-AR')}{status?.universe ? ` en ${status.universe.name}` : ''}</span>}
           </div>
           <p>
-            Batea calcula el tono de los temas que todavía no tienen uno. Los tonos calculados se ven con borde punteado.
+            Batea calcula el tono de los temas que tu programa de DJ no analizó. Los tonos calculados se ven con borde punteado: tomalos como una pista, porque cada programa elige distinto en temas ambiguos.
+            {' '}Para que coincida con la cabina, lo mejor es que rekordbox analice el tono (Preferencias → Análisis → marcá «KEY» y volvé a analizar): Batea lo toma de ahí al sincronizar.
+            {ks?.outdated ? <> Hay un detector nuevo: {ks.outdated.toLocaleString('es-AR')} {ks.outdated === 1 ? 'tono estimado antes se vuelve' : 'tonos estimados antes se vuelven'} a calcular.</> : null}
           </p>
           {ks?.accuracy ? (
             <div className="muted" style={{ fontSize: 12.5 }}>

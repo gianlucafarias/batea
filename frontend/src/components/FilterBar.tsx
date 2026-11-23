@@ -5,6 +5,7 @@ import { CORE_SOURCES, sourceLabel } from '../sources'
 import { useApp } from '../store'
 import type { Filters, Tag } from '../types'
 import { keyColor, ROLE_CATEGORIES } from '../util'
+import { allNotations, formatKey, useKeyNotation } from '../lib/keyNotation'
 import { IconFilter, IconSearch, IconX } from './icons'
 
 export function groupTags(tags: Tag[]): [string, Tag[]][] {
@@ -35,6 +36,7 @@ function NumRange({ label, min, max, step, value, onChange, placeholder }: {
 }
 
 export function KeyWheelPicker({ selected, onToggle }: { selected: string[]; onToggle: (k: string) => void }) {
+  const notation = useKeyNotation((s) => s.notation)
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 3 }}>
       {['B', 'A'].flatMap((l) => Array.from({ length: 12 }, (_, i) => `${i + 1}${l}`)).map((k) => {
@@ -42,7 +44,7 @@ export function KeyWheelPicker({ selected, onToggle }: { selected: string[]; onT
         return (
           <button key={k} onClick={() => onToggle(k)} className="keybadge" style={{
             background: on ? keyColor(k) : 'transparent', color: on ? '#111' : keyColor(k), border: `1px solid ${keyColor(k, on ? 1 : 0.45)}`, minWidth: 0, height: 22,
-          }}>{k}</button>
+          }} title={allNotations(k)}>{formatKey(k, notation)}</button>
         )
       })}
     </div>
@@ -140,7 +142,7 @@ export function FilterBar({ filters, onChange, onSaveSmart, counts }: Props) {
               )}
             </div>
             <div className="tag-group">
-              <span className="eyebrow">Tonalidad (Camelot)</span>
+              <span className="eyebrow">Tonalidad</span>
               <KeyWheelPicker selected={filters.keys ?? []} onToggle={(k) => set({ keys: toggleIn(filters.keys, k) as string[] })} />
             </div>
             {grouped.map(([cat, list]) => (

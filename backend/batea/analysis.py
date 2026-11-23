@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import config, db, features, jobs, keys
+from . import config, db, features, jobs, keys, tempo
 from .anlz import Curves
 from .jobs import Job
 
@@ -47,42 +47,6 @@ def _detect_key(y: np.ndarray) -> str | None:
             if r > best_r:
                 best_r, best = r, (pc, minor)
     return keys.camelot_from_pitch(*best) if best else None
-
-
-def _fold_bpm(bpm: float) -> float:
-    if not bpm or bpm <= 0 or not np.isfinite(bpm):
-        return 0.0
-    while bpm < 95:
-        bpm *= 2
-    while bpm > 165:
-        bpm /= 2
-    return bpm
-
-
-def _refine_bpm(y: np.ndarray, est: float) -> float:
-    """La música electrónica tiene tempo fijo: afinamos con la autocorrelación a 8 beats."""
-    import librosa
-
-    hop = 128
-    fps = SR / hop
-    oenv = librosa.onset.onset_strength(y=y, sr=SR, hop_length=hop)
-    oenv = oenv - oenv.mean()
-    best_bpm, best_val = est, -np.inf
-    for beats in (8, 16):
-        lag0 = beats * 60 / est * fps
-        lo, hi = int(lag0 * 0.97), int(lag0 * 1.03) + 2
-        if hi + 2 >= len(oenv):
-            continue
-        ac = np.array([np.dot(oenv[:-lag], oenv[lag:]) for lag in range(lo - 1, hi + 2)])
-        k = int(np.argmax(ac[1:-1])) + 1
-        a, b, c = ac[k - 1], ac[k], ac[k + 1]
-        off = 0.5 * (a - c) / (a - 2 * b + c) if (a - 2 * b + c) != 0 else 0
-        lag = lo - 1 + k + off
-        if b > best_val or beats == 16:
-            best_val, best_bpm = b, beats * 60 * fps / lag
-    if abs(best_bpm - round(best_bpm)) < 0.12:
-        best_bpm = float(round(best_bpm))
-    return best_bpm
 
 
 def read_tags(path: str) -> dict:
@@ -171,43 +135,69 @@ def _fit_grid(onset: np.ndarray, lo: np.ndarray, bpm: float, dur: float) -> tupl
     return beats, beats[first % 4::4]
 
 
+def _key_version() -> int:
+    from .keyfill import current_version
+
+    return current_version()
+
+
+ANALYSIS_VERSION = 2   # 2: BPM con RhythmExtractor2013 / peine de graves (antes: tempo de librosa, fallaba en temas duros)
+
+
+def _load(path: str) -> tuple[np.ndarray, np.ndarray | None]:
+    """(audio a 22050 Hz para curvas y grilla, audio a 44100 Hz para Essentia o None)."""
+    import librosa
+
+    try:
+        import essentia
+
+        essentia.log.infoActive = False
+        essentia.log.warningActive = False
+        import essentia.standard as es
+
+        a44 = es.MonoLoader(filename=path, sampleRate=44100)()
+        if len(a44):
+            return librosa.resample(a44, orig_sr=44100, target_sr=SR, res_type="soxr_hq"), a44
+    except ImportError:
+        pass
+    except Exception:  # noqa: BLE001  (formato que Essentia no lee: probamos con librosa)
+        pass
+    y, _ = librosa.load(path, sr=SR, mono=True)
+    return y, None
+
+
 def analyze_file(path: str) -> dict:
     """Corre en un proceso aparte. Devuelve todo serializable."""
     import librosa
 
     meta = read_tags(path)
-    y, _ = librosa.load(path, sr=SR, mono=True)
+    y, a44 = _load(path)
     if len(y) < SR * 5:
         raise ValueError("archivo demasiado corto")
     dur = len(y) / SR
 
+    S = np.abs(librosa.stft(y, n_fft=2048, hop_length=HOP))
+    freqs = librosa.fft_frequencies(sr=SR, n_fft=2048)
+    lo = np.sqrt((S[freqs < 200] ** 2).sum(axis=0))
     onset = librosa.onset.onset_strength(y=y, sr=SR, hop_length=HOP, aggregate=np.median)
-    tempo = librosa.beat.tempo(onset_envelope=onset, sr=SR, hop_length=HOP, start_bpm=126) \
-        if hasattr(librosa.beat, "tempo") else librosa.feature.tempo(onset_envelope=onset, sr=SR, hop_length=HOP, start_bpm=126)
-    bpm = _fold_bpm(float(np.atleast_1d(tempo)[0]))
-    try:
-        bpm = _refine_bpm(y, bpm)
-    except Exception:  # noqa: BLE001
-        pass
+
+    bpm = tempo.estimate(y, SR, lo, onset, HOP, a44)
     try:  # si el archivo trae BPM (Beatport, etc.) y coincide, confiamos en él
-        tag_bpm = _fold_bpm(float(str(meta.get("bpm_tag") or "0").replace(",", ".")))
-        if tag_bpm and abs(tag_bpm - bpm) / bpm < 0.03:
+        tag_bpm = tempo.fold(float(str(meta.get("bpm_tag") or "0").replace(",", ".")))
+        if tag_bpm and bpm and abs(tag_bpm - bpm) < 0.25:   # los tags suelen venir redondeados: solo para afinar
             bpm = tag_bpm
     except ValueError:
         pass
 
     tag_key = keys.to_camelot(meta.get("key_tag"))
     try:
-        from .keyfill import detect_key_file
+        from .keyfill import detect_key_audio, detect_key_file
 
-        detected_key, _ = detect_key_file(path)
+        detected_key = (detect_key_audio(a44) if a44 is not None else detect_key_file(path))[0]
     except Exception:  # noqa: BLE001
         detected_key = _detect_key(y)
 
     # Curvas de volumen y bandas
-    S = np.abs(librosa.stft(y, n_fft=2048, hop_length=HOP))
-    freqs = librosa.fft_frequencies(sr=SR, n_fft=2048)
-    lo = np.sqrt((S[freqs < 200] ** 2).sum(axis=0))
     mi = np.sqrt((S[(freqs >= 200) & (freqs < 2500)] ** 2).sum(axis=0))
     hi = np.sqrt((S[freqs >= 2500] ** 2).sum(axis=0))
     tot = lo + mi + hi + 1e-9
@@ -231,6 +221,7 @@ def analyze_file(path: str) -> dict:
         "key": tag_key or detected_key,
         "key_source": "tag" if tag_key else ("batea" if detected_key else None),
         "key_detected": detected_key,
+        "key_ver": _key_version() if (not tag_key and detected_key) else None,
         "features": f.__dict__ if f else None,
         "waveform": wave,
     }
@@ -382,10 +373,10 @@ def _store(res: dict, existing_id: int | None) -> int:
     row = dict(
         path=res["path"], title=title, artist=m.get("artist"), album=m.get("album"), genre=m.get("genre"),
         label=m.get("label"), remixer=m.get("remixer"), bpm=float(res["bpm"]) if res["bpm"] else None, key=res["key"],
-        key_source=res.get("key_source"),
+        key_source=res.get("key_source"), key_ver=res.get("key_ver"),
         key_raw=m.get("key_tag") or res.get("key_detected"), duration=float(res["duration"]) if res["duration"] else None, year=year,
         bitrate=m.get("bitrate"), filetype=Path(res["path"]).suffix.lower().lstrip("."),
-        artwork=m.get("artwork_file"),
+        artwork=m.get("artwork_file"), analysis_ver=ANALYSIS_VERSION,
     )
     from .discover import file_date as _file_date  # import diferido: evita ciclos
     with db.conn() as c:

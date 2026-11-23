@@ -270,6 +270,9 @@ const shortcuts = [
   ['Doble clic en un punto', 'Borrarlo'],
   ['Perilla o crossfader en pausa', 'Deja un punto en la curva donde está el cabezal'],
   ['Perilla o crossfader sonando', 'Lo manejás vos hasta que pauses'],
+  ['Tempo', 'De a 0,1 %; Mayús de a 1 %. Mover el de B apaga Sync.'],
+  ['Sync', 'B sigue el tempo de A: el tempo de A acelera o frena toda la mezcla'],
+  ['Master tempo', 'Cambia la velocidad sin cambiar el tono. Apagado, el tono sube y baja con la velocidad, como un vinilo.'],
   ['Paso', 'Mayús para pasos grandes. Opción para ajustar la fase de a 1 ms.'],
 ] as const
 

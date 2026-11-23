@@ -414,7 +414,7 @@ export function Home() {
       <header className="viewhead">
         <div>
           <h1>Bateas</h1>
-          <div className="sub">{status?.tracks.toLocaleString('es-AR')} temas{status?.universe ? ` en ${status.universe.name}` : ''}</div>
+          <div className="sub">{status?.tracks.toLocaleString('es-AR')} temas{status?.universe ? ` en ${status.universe.name}` : ''} · Tus playlists y carpetas como cajas de discos. Abrí una para revolverla.</div>
         </div>
         <div className="spacer" />
         {pendingExport.length > 0 && (

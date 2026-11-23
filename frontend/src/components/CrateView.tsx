@@ -10,7 +10,8 @@ import { BatchBar } from './BatchBar'
 import { Digger } from './Digger'
 import { FilterBar } from './FilterBar'
 import { folderCrate } from './FolderTree'
-import { IconCrate, IconExport, IconGrid, IconList, IconTag } from './icons'
+import { IconChart, IconCrate, IconExport, IconGrid, IconList, IconTag } from './icons'
+import { SetChart } from './SetChart'
 import { ListView, sortTracks, type PickFn, type SortKey } from './ListView'
 import { Wall } from './Wall'
 
@@ -40,7 +41,10 @@ export function CrateView() {
   const { crateId, crates, virtualCrates, folders, libraryVersion, loadMeta, go, toast, setExportOpen, askText, openTagger, analyzeTracks, analysisQueue } = useApp()
   const dir = useMemo(() => folderCrate(crateId, folders), [crateId, folders])
   const crate = useMemo(() => dir ?? artistCrate(crateId) ?? [...virtualCrates, ...crates].find((c) => String(c.id) === crateId), [dir, crateId, crates, virtualCrates])
-  const [mode, setMode] = useState<Mode>(loadMode)
+  const [mode, setModeState] = useState<Mode>(loadMode)
+  // El gráfico se abre a pedido y no se recuerda: al elegir otra vista se cierra
+  const [chart, setChart] = useState(false)
+  const setMode = useCallback((m: Mode) => { setModeState(m); setChart(false) }, [])
   const [filters, setFilters] = useState<Filters>({})
   const [tracks, setTracks] = useState<Track[] | null>(null)
   const [sort, setSortState] = useState<[SortKey, 1 | -1]>(loadSort)
@@ -134,6 +138,60 @@ export function CrateView() {
     api.reorderCrate(Number(crate.id), ids).catch((e) => { setTracks(before); toast((e as Error).message, 'error') })
   }, [crate, tracks, toast])
 
+  // desde el gráfico: sumar un tema puente o cambiar uno, en tu caja y en el orden que se ve
+  const insertAt = useCallback(async (index: number, tid: number) => {
+    if (!crate) return
+    const ids = (tracks ?? []).map((t) => t.id)
+    ids.splice(index, 0, tid)
+    try {
+      await api.addToCrate(crate.id, [tid])
+      await api.reorderCrate(Number(crate.id), ids)
+      toast(`Agregado como tema ${index + 1}`)
+    } catch (e) { toast((e as Error).message, 'error') }
+    useApp.getState().bump(); void loadMeta()
+  }, [crate, tracks, toast, loadMeta])
+  const replaceAt = useCallback(async (index: number, tid: number) => {
+    if (!crate) return
+    const old = (tracks ?? [])[index]
+    const ids = (tracks ?? []).map((t) => t.id)
+    ids[index] = tid
+    try {
+      await api.addToCrate(crate.id, [tid])
+      await api.removeFromCrate(crate.id, old.id)
+      await api.reorderCrate(Number(crate.id), ids)
+      toast(`Cambiado: sale ${old.title ?? 'el tema'}`)
+    } catch (e) { toast((e as Error).message, 'error') }
+    useApp.getState().bump(); void loadMeta()
+  }, [crate, tracks, toast, loadMeta])
+  const duplicate = useCallback(async () => {
+    if (!crate) return
+    try {
+      const { id } = await api.duplicateCrate(crate.id)
+      await loadMeta()
+      go('crate', String(id))
+      toast('Copia creada en tus cajas: acá podés agregar y cambiar temas')
+    } catch (e) { toast((e as Error).message, 'error') }
+  }, [crate, loadMeta, go, toast])
+
+  // sesión del historial: el gráfico sigue lo que sonó, en orden y con los temas que volviste a poner
+  const [plays, setPlays] = useState<number[] | null>(null)
+  const isSession = crate?.kind === 'session'
+  useEffect(() => {
+    setPlays(null)
+    if (!chart || !isSession) return
+    let alive = true
+    api.sessionPlays(crateId!).then((r) => alive && setPlays(r.ids)).catch(() => { /* sin secuencia: se usa la lista */ })
+    return () => { alive = false }
+  }, [chart, isSession, crateId, libraryVersion])
+  // El gráfico sigue SIEMPRE el orden real (el de la caja, o en una sesión lo que sonó), no la columna por la que
+  // esté ordenada la lista: ordenar la lista por fecha o BPM y ver eso como "el set" no tiene sentido.
+  // La API ya devuelve los temas en el orden de la caja.
+  const chartTracks = useMemo(() => {
+    if (!isSession || !plays?.length) return tracks ?? []
+    const byId = new Map((tracks ?? []).map((t) => [t.id, t]))
+    return plays.map((id) => byId.get(id)).filter((t): t is Track => !!t)
+  }, [isSession, plays, tracks])
+
   const selected = useMemo(() => (multi.size ? sorted.filter((t) => multi.has(t.id)) : []), [sorted, multi])
 
   if (!crate) return <div className="empty"><h3>Caja no encontrada</h3></div>
@@ -193,20 +251,30 @@ export function CrateView() {
       <div className="toolbar">
         <FilterBar filters={filters} onChange={setFilters} onSaveSmart={saveSmart} counts={tagCounts} />
         <div className="grow" />
-        {(crate.kind === 'user' || crate.kind === 'playlist') && mode === 'list' && (sort[0] !== 'position' || sort[1] !== 1) &&
+        {(crate.kind === 'user' || crate.kind === 'playlist' || crate.kind === 'session') && mode === 'list' && !chart && (sort[0] !== 'position' || sort[1] !== 1) &&
           <button className="btn ghost sm" onClick={() => setSort(['position', 1])} title="Para arrastrar los temas y ordenarlos a mano">Orden de la caja</button>}
         <button className="btn sm" disabled={!sorted.length} onClick={() => openTagger(sorted, crate.name)} title="Etiquetar estos temas con el teclado"><IconTag size={13} /> Etiquetar en tanda</button>
+        <button className={`btn sm${chart ? ' primary' : ''}`} disabled={!chart && sorted.length < 2} aria-pressed={chart}
+          onClick={() => setChart((v) => !v)} title="Energía, BPM y tono de cada tema en el orden de la lista, y qué conviene revisar">
+          <IconChart size={14} /> {chart ? 'Cerrar gráfico' : 'Ver gráfico'}
+        </button>
         <Seg role="tablist">
-          <button className={mode === 'dig' ? 'on' : ''} onClick={() => setMode('dig')} title="Hojear como en una batea" aria-label="Hojear como en una batea"><IconCrate size={14} /></button>
-          <button className={mode === 'wall' ? 'on' : ''} onClick={() => setMode('wall')} title="Pared de carátulas" aria-label="Pared de carátulas"><IconGrid size={14} /></button>
-          <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')} title="Lista" aria-label="Lista"><IconList size={14} /></button>
+          <button className={!chart && mode === 'dig' ? 'on' : ''} onClick={() => setMode('dig')} title="Hojear como en una batea" aria-label="Hojear como en una batea"><IconCrate size={14} /></button>
+          <button className={!chart && mode === 'wall' ? 'on' : ''} onClick={() => setMode('wall')} title="Pared de carátulas" aria-label="Pared de carátulas"><IconGrid size={14} /></button>
+          <button className={!chart && mode === 'list' ? 'on' : ''} onClick={() => setMode('list')} title="Lista" aria-label="Lista"><IconList size={14} /></button>
         </Seg>
       </div>
       {tracks === null ? <div className="empty">Cargando discos…</div> :
+        chart ? <SetChart tracks={chartTracks} orderNote={null} session={isSession}
+          repeats={isSession && plays?.length ? chartTracks.length - new Set(chartTracks.map((t) => t.id)).size : 0}
+          onReorder={crate.kind === 'user' || crate.kind === 'playlist' ? reorder : undefined}
+          onInsert={crate.kind === 'user' ? insertAt : undefined}
+          onReplace={crate.kind === 'user' ? replaceAt : undefined}
+          onDuplicate={crate.kind !== 'user' && crate.kind !== 'smart' && crate.kind !== 'virtual' && crate.kind !== 'dir' && crate.kind !== 'artist' ? duplicate : undefined} /> :
         mode === 'dig' ? <Digger key={`${crateId}|${JSON.stringify(filters)}|${sort.join()}`} tracks={sorted} crateName={crate.name} /> :
         mode === 'wall' ? <Wall tracks={sorted} multi={multi} onPick={pick} /> :
         <ListView tracks={sorted} sort={sort} onSort={setSort} multi={multi} onPick={pick} onReorder={reorderable ? reorder : undefined} />}
-      {selected.length > 0 && mode !== 'dig' && <BatchBar tracks={selected} onClear={() => setMulti(new Set())} />}
+      {selected.length > 0 && mode !== 'dig' && !chart && <BatchBar tracks={selected} onClear={() => setMulti(new Set())} />}
     </div>
   )
 }

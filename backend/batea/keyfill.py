@@ -1,8 +1,11 @@
 """Completar las tonalidades que rekordbox no tiene.
 
-Usa el detector de Essentia con el perfil "bgate" (pensado para música
-electrónica); si Essentia no está (versión Intel), un detector con librosa. Antes de completar, se mide contra temas que SÍ tienen tono en
-rekordbox, para mostrar cuánto coincide en tu propia librería.
+Usa el detector de Essentia con el perfil "bgate" (pensado para música electrónica); si Essentia no está
+(versión Intel), un detector con librosa. Antes de completar, se mide contra temas que SÍ tienen tono en
+rekordbox, para mostrar cuánto coincide en tu propia librería. Lo más fiel a la cabina sigue siendo que
+rekordbox analice el tono: Batea lo toma de ahí en cuanto existe.
+
+Los tonos estimados con un detector anterior (key_ver) se vuelven a calcular al completar.
 """
 from __future__ import annotations
 
@@ -64,7 +67,20 @@ def detect_key_file(path: str) -> tuple[str | None, float]:
     essentia.log.warningActive = False
     import essentia.standard as es
 
-    audio = es.MonoLoader(filename=path, sampleRate=44100)()
+    return detect_key_audio(es.MonoLoader(filename=path, sampleRate=44100)())
+
+
+KEY_VERSION = 1   # sube cuando cambie el detector: los tonos estimados con uno anterior se recalculan (key_ver)
+
+
+def detect_key_audio(audio) -> tuple[str | None, float]:
+    """Igual que detect_key_file, con el audio ya cargado a 44100 Hz (Essentia).
+
+    Probado contra rekordbox en 300 temas de una librería real: 52% exacto, 72% compatible. Plantillas
+    aprendidas de rekordbox (52%) y la red de madmom (55%) no mejoraron lo suficiente como para cambiarlo:
+    el tono de un tema de techno es ambiguo y cada programa elige distinto."""
+    import essentia.standard as es
+
     if len(audio) < 44100 * 10:
         return None, 0.0
     if len(audio) > 44100 * 600:          # sets largos: alcanza con 10 minutos del medio
@@ -82,10 +98,21 @@ def _safe(path: str) -> tuple[str | None, float, str | None]:
         return None, 0.0, f"{type(e).__name__}: {e}"
 
 
+def current_version() -> int:
+    return KEY_VERSION
+
+
+def _todo_sql() -> tuple[str, list]:
+    """Temas sin tono, o con un tono (o un "no se pudo") de un detector anterior."""
+    return ("((t.key IS NULL AND COALESCE(t.key_source,'')!='none') "
+            "OR (t.key_source IN ('batea','none') AND COALESCE(t.key_ver,1) < ?))", [current_version()])
+
+
 def status(c) -> dict:
     uni = universe.clause(c)
     where, params = ("AND " + uni[0], uni[1]) if uni else ("", [])
-    rows = c.execute(f"SELECT t.path FROM tracks t WHERE t.key IS NULL AND COALESCE(t.key_source,'')!='none' AND t.hidden=0 {where}", params).fetchall()
+    todo, tp = _todo_sql()
+    rows = c.execute(f"SELECT t.path, t.key FROM tracks t WHERE {todo} AND t.hidden=0 {where}", tp + params).fetchall()
     total = c.execute(f"SELECT COUNT(*) FROM tracks t WHERE t.hidden=0 {where}", params).fetchone()[0]
     est = c.execute(f"SELECT COUNT(*) FROM tracks t WHERE t.key_source='batea' AND t.hidden=0 {where}", params).fetchone()[0]
     acc = db.get_meta(c, "key_accuracy")
@@ -93,6 +120,7 @@ def status(c) -> dict:
         "total": total,
         "missing": len(rows),
         "missing_online": sum(1 for r in rows if is_online(r["path"])),
+        "outdated": sum(1 for r in rows if r["key"]),     # ya tenían un tono estimado con el detector anterior
         "estimated": est,
         "accuracy": json.loads(acc) if acc else None,
     }
@@ -103,8 +131,9 @@ def run(job: Job) -> dict:
     with db.conn() as c:
         uni = universe.clause(c)
         where, params = ("AND " + uni[0], uni[1]) if uni else ("", [])
+        tq, tp = _todo_sql()
         todo = [(r["id"], r["path"]) for r in c.execute(
-            f"SELECT t.id, t.path FROM tracks t WHERE t.key IS NULL AND COALESCE(t.key_source,'')!='none' AND t.hidden=0 {where}", params)]
+            f"SELECT t.id, t.path FROM tracks t WHERE {tq} AND t.hidden=0 {where}", tp + params)]
         known = [(r["id"], r["path"], r["key"]) for r in c.execute(
             f"SELECT t.id, t.path, t.key FROM tracks t WHERE t.key IS NOT NULL AND t.key_source='rekordbox' {where}", params)]
     todo = [(i, p) for i, p in todo if is_online(p)]
@@ -167,7 +196,8 @@ def run(job: Job) -> dict:
         _flush(batch)
         if none:
             with db.conn() as c:
-                c.executemany("UPDATE tracks SET key_source='none' WHERE id=? AND key IS NULL", none)
+                c.executemany("UPDATE tracks SET key=NULL, key_source='none', key_ver=? WHERE id=? AND (key IS NULL OR key_source='batea')",
+                              [(current_version(), i) for (i,) in none])
     return result
 
 
@@ -175,5 +205,6 @@ def _flush(batch: list[tuple[str, int]]) -> None:
     if not batch:
         return
     with db.conn() as c:
-        c.executemany("UPDATE tracks SET key=?, key_source='batea' WHERE id=? AND key IS NULL", batch)
+        c.executemany(f"UPDATE tracks SET key=?, key_source='batea', key_ver={current_version()} "
+                      "WHERE id=? AND (key IS NULL OR key_source IN ('batea','none'))", batch)
     batch.clear()

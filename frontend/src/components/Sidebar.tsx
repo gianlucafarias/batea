@@ -3,7 +3,7 @@ import { api } from '../api'
 import { CORE_SOURCES, crateSource, isQueuedJob, isSessionCrate, sourceLabel } from '../sources'
 import { useApp } from '../store'
 import type { Crate } from '../types'
-import { BrandMark, IconChevron, IconCrate, IconExport, IconEye, IconEyeOff, IconInbox, IconMap, IconPlus, IconTag, IconSettings } from './icons'
+import { BrandMark, IconChevron, IconCrate, IconExport, IconEye, IconEyeOff, IconInbox, IconMap, IconPlus, IconTag, IconSettings, IconChart } from './icons'
 import { FolderTree } from './FolderTree'
 import { SourcesNotice } from './Sources'
 import { UniverseSwitcher } from './Universe'
@@ -59,6 +59,7 @@ function Tree({ nodes, all, depth, showHidden, empty }: { nodes: Crate[]; all: C
 function ProgramTree({ kind, crates, empty }: { kind: string; crates: Crate[]; empty: Set<number | string> }) {
   const [showHidden, setShowHidden] = useState(false)
   const [showSessions, setShowSessions] = useState(false)
+  const statsOn = useApp((s) => s.view === 'sessions')
   const playlists = crates.filter((crate) => !isSessionCrate(crate))
   const sessions = crates.filter(isSessionCrate)
   const roots = playlists.filter((crate) => crate.parent_id == null)
@@ -84,6 +85,10 @@ function ProgramTree({ kind, crates, empty }: { kind: string; crates: Crate[]; e
           <div className="side-h side-history">
             <button className="eyebrow" aria-expanded={showSessions} onClick={() => setShowSessions(!showSessions)}>
               Historial de sesiones {showSessions ? '−' : '+'}
+            </button>
+            <button className={`side-stats${statsOn ? ' on' : ''}`} onClick={() => useApp.getState().go('sessions')}
+              title="Estadísticas de tus sesiones: curva típica, temas de peak, pasadas que repetís" aria-label="Estadísticas de tus sesiones">
+              <IconChart size={14} />
             </button>
           </div>
           {showSessions && <Tree nodes={sessionRoots} all={sessions} depth={0} showHidden={showHidden} empty={empty} />}
@@ -162,13 +167,13 @@ export function Sidebar() {
       <UniverseSwitcher />
       <nav className="nav" ref={navHover.ref}>
         {navHover.highlight}
-        <button data-fh className={view === 'home' ? 'on' : ''} onClick={() => go('home')}><IconCrate /> Bateas</button>
-        <button data-fh className={view === 'map' ? 'on' : ''} onClick={() => go('map')}><IconMap /> Mapa</button>
-        <button data-fh className={view === 'tagger' ? 'on' : ''} onClick={startTagging} title="Etiquetar con el teclado los temas sin clasificar">
+        <button data-fh data-tour="nav-home" className={view === 'home' ? 'on' : ''} onClick={() => go('home')}><IconCrate /> Bateas</button>
+        <button data-fh data-tour="nav-map" className={view === 'map' ? 'on' : ''} onClick={() => go('map')}><IconMap /> Mapa</button>
+        <button data-fh data-tour="nav-tagger" className={view === 'tagger' ? 'on' : ''} onClick={startTagging} title="Etiquetar con el teclado los temas sin clasificar">
           <IconTag /> Etiquetar
           {status?.inbox ? <span className="count">{status.inbox.toLocaleString('es-AR')}</span> : null}
         </button>
-        <button data-fh className={view === 'inbox' ? 'on' : ''} onClick={() => go('inbox')}>
+        <button data-fh data-tour="nav-inbox" className={view === 'inbox' ? 'on' : ''} onClick={() => go('inbox')}>
           <IconInbox /> Analizar e importar
           {status?.local ? <span className="count">{status.local}</span> : null}
         </button>
@@ -222,8 +227,9 @@ export function Sidebar() {
         )}
         <SourcesNotice />
         <div className="side-actions">
-          <button className="btn sm" onClick={() => setSettings('programs')} title="Programas de DJ y agentes de IA"><IconSettings size={14} /> Ajustes</button>
-          <button className="btn sm" onClick={() => setExportOpen(true)} title="Exportar cajas a rekordbox, Traktor, Serato o M3U"><IconExport size={14} /> Exportar</button>
+          <button className="btn sm" data-tour="settings" onClick={() => setSettings('programs')} title="Programas, tonalidad y agentes de IA"><IconSettings size={14} /> Ajustes</button>
+          <button className="btn sm" data-tour="export" onClick={() => setExportOpen(true)} title="Exportar cajas a rekordbox, Traktor, Serato o M3U"><IconExport size={14} /> Exportar</button>
+          <button className="btn sm icon" onClick={() => useApp.getState().setTour(true)} title="Ayuda: ver el recorrido por Batea" aria-label="Ayuda">?</button>
         </div>
       </div>
     </aside>

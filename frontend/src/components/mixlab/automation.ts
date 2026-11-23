@@ -1,4 +1,4 @@
-import { KILL, type Side, type Transition } from './model'
+import { KILL, type DeckTune, type Side, type Transition } from './model'
 
 /** Una curva por control: crossfader (x) y cada banda del EQ de A y de B (0 graves, 1 medios, 2 agudos). */
 export type LaneId = 'x' | 'A0' | 'A1' | 'A2' | 'B0' | 'B1' | 'B2'
@@ -87,6 +87,7 @@ export interface SavedMix {
   length: number
   custom: boolean
   automation: Automation
+  tune?: DeckTune
 }
 
 const isNum = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
@@ -105,5 +106,8 @@ export function parseSaved(raw: unknown): SavedMix | null {
     if (!Array.isArray(pts) || !pts.every((p) => p && isNum(p.at) && isNum(p.v))) return null
     automation[lane] = pts.map((p) => ({ at: p.at, v: p.v }))
   }
-  return { v: 1, mixBar: m.mixBar, startBar: m.startBar, nudge: m.nudge, style: m.style, length: m.length, custom: !!m.custom, automation }
+  const t = m.tune as Record<string, unknown> | undefined
+  const tune = t && typeof t === 'object' && isNum(t.tempoA) && isNum(t.tempoB) && isNum(t.keyA) && isNum(t.keyB)
+    ? { tempoA: t.tempoA, tempoB: t.tempoB, keyA: t.keyA, keyB: t.keyB, sync: t.sync !== false } : undefined
+  return { v: 1, mixBar: m.mixBar, startBar: m.startBar, nudge: m.nudge, style: m.style, length: m.length, custom: !!m.custom, automation, tune }
 }

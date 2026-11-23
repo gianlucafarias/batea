@@ -3,10 +3,12 @@ import { spring, usePresence } from '../lib/motion'
 import { useApp, type SettingsTab } from '../store'
 import { AgentsPanel } from './Agents'
 import { AboutPanel } from './About'
+import { PrefsPanel } from './Prefs'
 import { SourcesPanel } from './Sources'
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'programs', label: 'Programas' },
+  { id: 'prefs', label: 'Preferencias' },
   { id: 'agents', label: 'Agentes de IA' },
   { id: 'about', label: 'Acerca de' },
 ]
@@ -40,7 +42,7 @@ export function SettingsDialog() {
           </div>
         </div>
         <div className="settings-body" role="tabpanel">
-          {tab === 'programs' ? <SourcesPanel /> : tab === 'agents' ? <AgentsPanel /> : <AboutPanel />}
+          {tab === 'programs' ? <SourcesPanel /> : tab === 'prefs' ? <PrefsPanel /> : tab === 'agents' ? <AgentsPanel /> : <AboutPanel />}
         </div>
         <div className="settings-foot">
           <button className="btn primary sm" onClick={() => setSettings(null)}>Listo</button>

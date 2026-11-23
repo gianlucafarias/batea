@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
 import { artUrl } from '../api'
+import { allNotations, formatKey, useKeyNotation } from '../lib/keyNotation'
 import { cleanTitle, hash, keyColor } from '../util'
 
 const SLEEVES = ['#121110', '#161412', '#1d1a17', '#0f1214', '#17120f', '#131313']
@@ -38,7 +39,7 @@ export const Sleeve = memo(function Sleeve({ id, title, artist, trackKey, bpm, h
     >
       {px >= 60 && (trackKey || bpm) ? (
         <span className="stamp">
-          {trackKey && <b style={{ color: keyColor(trackKey) }}>{trackKey}</b>}
+          {trackKey && <b style={{ color: keyColor(trackKey) }}><KeyText k={trackKey} /></b>}
           {trackKey && bpm ? ' · ' : ''}{bpm ? `${Math.round(bpm)} BPM` : ''}
         </span>
       ) : null}
@@ -56,12 +57,21 @@ export const Sleeve = memo(function Sleeve({ id, title, artist, trackKey, bpm, h
 })
 
 /** `est`: tonalidad calculada por Batea (rekordbox no la tenía); se marca con borde punteado. */
+/** La tonalidad como texto, en la notación elegida en Ajustes. */
+export function KeyText({ k }: { k: string | null | undefined }) {
+  const notation = useKeyNotation((s) => s.notation)
+  return <>{formatKey(k, notation)}</>
+}
+
 export function KeyBadge({ k, est }: { k: string | null | undefined; est?: boolean }) {
-  if (!k) return <span className="keybadge none">–</span>
+  const notation = useKeyNotation((s) => s.notation)
+  if (!k) return <span className="keybadge none" title="Sin tonalidad">–</span>
+  const label = formatKey(k, notation)
+  const all = allNotations(k)
   if (est) {
-    return <span className="keybadge est" title="Tonalidad estimada por Batea" style={{ color: keyColor(k), borderColor: keyColor(k) }}>{k}</span>
+    return <span className="keybadge est" title={`${all} · estimada por Batea (puede no coincidir con rekordbox)`} style={{ color: keyColor(k), borderColor: keyColor(k) }}>{label}</span>
   }
-  return <span className="keybadge" style={{ background: keyColor(k) }}>{k}</span>
+  return <span className="keybadge" title={all} style={{ background: keyColor(k) }}>{label}</span>
 }
 
 export function energyColor(e: number): string {

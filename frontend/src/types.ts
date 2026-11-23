@@ -13,6 +13,8 @@ export interface Track {
   energy: number | null
   energy_user: number | null
   energy_auto: number | null
+  /** energía 1-10 con decimales (percentil en la librería) */
+  energy_fine?: number | null
   intro_bars: number | null
   outro_bars: number | null
   breaks: number | null
@@ -123,6 +125,8 @@ export interface Recommendation {
   id: number
   score: number
   reasons: string[]
+  /** motivos en frases cortas (historial, playlists compartidas, artista…) */
+  why?: string[]
   learned: boolean
   track: Track
 }
@@ -170,6 +174,8 @@ export interface KeyStatus {
   total: number
   missing: number
   missing_online: number
+  /** de los que faltan, cuántos ya tenían un tono estimado con el detector anterior (se recalculan) */
+  outdated?: number
   estimated: number
   accuracy: { sample: number; exact: number; compatible: number; date: string } | null
 }
@@ -201,4 +207,36 @@ export interface FolderNode {
   k?: FolderNode[]
   root?: boolean
   off?: boolean
+}
+
+export interface PassFit { key: string; key_ok: boolean; bpm_pct: number | null }
+
+/** Tema que entra entre dos (puente) o en lugar de uno (reemplazo). */
+export interface Suggestion {
+  id: number
+  score: number
+  why: string[]
+  fit: { from_prev?: PassFit; to_next?: PassFit }
+  track: Track
+}
+
+export interface StatTrack { id: number; title: string | null; artist: string | null; bpm: number | null; key: string | null; count?: number; last?: string }
+
+export interface SessionStats {
+  years: number[]
+  year: number | null
+  universe: boolean
+  summary: {
+    sessions: number; tracks: number; plays: number; minutes: number | null; bpm: number | null
+    peak_at: number | null; peak_minute: number | null; first: string | null; last: string | null
+  }
+  typical: { x: number; mid: number | null; lo: number | null; hi: number | null }[]
+  curves: number
+  months: { month: string; sessions: number; bpm: number | null }[]
+  peak_tracks: StatTrack[]
+  openers: StatTrack[]
+  closers: StatTrack[]
+  pairs: { a: StatTrack; b: StatTrack; count: number }[]
+  forgotten: StatTrack[]
+  sessions: { id: number; name: string; date: string | null; tracks: number; minutes: number; bpm: number | null; energy: number | null; peak: number | null }[]
 }

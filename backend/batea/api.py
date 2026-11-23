@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, analysis, anlz, config, cues, db, discover, export, features, folders, jobs, keyfill, links, rbsync, recommend, runtime, universe, updater, updates
+from . import agents, analysis, anlz, config, cues, db, discover, export, features, folders, jobs, keyfill, links, rbsync, recommend, runtime, setinsights, universe, updater, updates
 from .sources import registry
 from .sources.base import KINDS, LABELS
 from .api_helpers import (
@@ -30,6 +30,23 @@ with db.conn() as _c:
 @app.on_event("startup")
 def _start_watch() -> None:
     discover.watch()
+
+
+@app.on_event("startup")
+def _backfill_session_plays() -> None:
+    """Una vez: la secuencia completa de las sesiones de rekordbox (con repeticiones) para el gráfico y las estadísticas."""
+    with db.conn() as c:
+        if db.get_meta(c, "session_plays") == "1" or not c.execute("SELECT 1 FROM crates WHERE rb_id LIKE 'h:%' LIMIT 1").fetchone():
+            return
+
+    def run() -> None:
+        try:
+            rbsync.backfill_session_plays()
+        except Exception:  # noqa: BLE001  (sin esto, las sesiones se leen como antes, sin repeticiones)
+            pass
+
+    import threading
+    threading.Thread(target=run, name="session-plays", daemon=True).start()
 
 
 # ---------------------------------------------------------------- actualizaciones
@@ -537,6 +554,31 @@ def analyze_tracks(body: TrackIds) -> dict:
         raise HTTPException(400, "No hay temas para analizar (o el disco está desconectado)")
     label = f"Analizando {Path(todo[0]).stem}" if len(todo) == 1 else f"Analizando {len(todo)} temas"
     return analysis.enqueue(todo, label).__dict__
+
+
+def _outdated(c) -> list[tuple[int, str]]:
+    """Temas propios analizados con una versión vieja del análisis (BPM poco confiable en temas duros)."""
+    return [(r[0], r[1]) for r in c.execute(
+        "SELECT id, path FROM tracks WHERE source='local' AND analyzed='audio' AND hidden=0 AND path IS NOT NULL "
+        "AND COALESCE(analysis_ver, 1) < ?", (analysis.ANALYSIS_VERSION,))]
+
+
+@app.get("/api/analyze/outdated")
+def analyze_outdated() -> dict:
+    reset_online_cache()
+    with db.conn() as c:
+        rows = _outdated(c)
+    return {"count": len(rows), "online": sum(1 for _, p in rows if is_online(p)), "version": analysis.ANALYSIS_VERSION}
+
+
+@app.post("/api/analyze/outdated")
+def reanalyze_outdated() -> dict:
+    reset_online_cache()
+    with db.conn() as c:
+        todo = [p for _, p in _outdated(c) if is_online(p)]
+    if not todo:
+        raise HTTPException(400, "No hay temas para reanalizar con el disco conectado")
+    return analysis.enqueue(todo, f"Reanalizando {len(todo)} temas con el análisis nuevo").__dict__
 
 
 @app.get("/api/analyze/queue")
@@ -1199,6 +1241,67 @@ def put_mix_settings(a: int, b: int, body: MixSettingsIn) -> dict:
             "INSERT INTO mix_settings(a, b, data) VALUES (?,?,?) "
             "ON CONFLICT(a, b) DO UPDATE SET data=excluded.data, updated_at=CURRENT_TIMESTAMP", (a, b, data))
     return {"ok": True}
+
+
+class SetIds(BaseModel):
+    ids: list[int]
+
+
+@app.post("/api/set/transitions")
+def set_transitions(body: SetIds) -> dict:
+    """Para el gráfico de una caja: qué sabe Batea de cada pasada A → B en el orden de la lista
+    (cuántas veces la tocaste, si la marcaste para evitar, si hay una mezcla guardada)."""
+    ids = body.ids[:2000]
+    pairs = [(a, b) for a, b in zip(ids, ids[1:]) if a != b]
+    out = []
+    with db.conn() as c:
+        for a, b in pairs:
+            lo, hi = _canon(a, b)
+            played = c.execute(
+                "SELECT COALESCE(SUM(count), 0) FROM relations WHERE a=? AND b=? AND kind='history'", (a, b)).fetchone()[0]
+            kinds = {r[0] for r in c.execute(
+                "SELECT kind FROM relations WHERE a=? AND b=? AND kind IN ('avoid','mix','mashup') AND source NOT LIKE 'history%'",
+                (lo, hi))}
+            saved = c.execute("SELECT 1 FROM mix_settings WHERE a=? AND b=?", (a, b)).fetchone() is not None
+            out.append({"a": a, "b": b, "played": int(played), "avoid": "avoid" in kinds,
+                        "mix": bool(kinds & {"mix", "mashup"}), "saved": saved})
+    return {"transitions": out}
+
+
+class SuggestIn(BaseModel):
+    prev: int | None = None
+    next: int | None = None
+    exclude: list[int] = []
+    limit: int = 8
+
+
+@app.post("/api/set/suggest")
+def set_suggest(body: SuggestIn) -> dict:
+    """Temas que entran entre `prev` y `next`: un puente para una pasada o un reemplazo del tema del medio."""
+    with db.conn() as c:
+        items = setinsights.suggest_between(c, body.prev, body.next, set(body.exclude[:2000]), min(body.limit, 20))
+        ids = [i["id"] for i in items]
+        if ids:
+            q = ",".join("?" * len(ids))
+            rows = {r["id"]: dict(r) for r in c.execute(f"SELECT {TRACK_COLUMNS} FROM tracks t WHERE t.id IN ({q})", ids)}
+            attach_tags(c, list(rows.values()))
+            mark_online(c, list(rows.values()))
+            for item in items:
+                item["track"] = rows[item["id"]]
+        return {"items": items}
+
+
+@app.get("/api/sessions/{cid}/plays")
+def session_plays(cid: int) -> dict:
+    """Lo que sonó en la sesión, en orden y con los temas repetidos."""
+    with db.conn() as c:
+        return {"ids": setinsights.session_sequence(c, cid)}
+
+
+@app.get("/api/sessions/stats")
+def sessions_stats(year: int | None = None, all_music: bool = False) -> dict:
+    with db.conn() as c:
+        return setinsights.session_stats(c, year, only_universe=not all_music)
 
 
 # ---------------------------------------------------------------- mapa

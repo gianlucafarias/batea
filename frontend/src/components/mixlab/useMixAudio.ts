@@ -17,9 +17,13 @@ interface Settings {
   bar: number
 }
 
+/** Velocidad real de cada deck (1 = original) y factor de tono (1 = original, 2^(st/12) para st semitonos). */
+export interface DeckSound { speed: number; pitch: number }
+
 interface Config extends Settings {
   timing: Timing | null
   rate: number
+  sound: Record<Side, DeckSound>
   onFrame: (time: number, playing: boolean) => void
 }
 
@@ -40,6 +44,9 @@ interface Media { duration: number | null; peaks: Peaks | null }
 
 const FLAT: EQ = [0, 0, 0]
 const EMPTY_MEDIA: Media = { duration: null, peaks: null }
+const SIDES: readonly Side[] = ['A', 'B']
+/** Cuánto hay que estirar el audio (sin tocar el tono) para que, reproducido a `pitch`, suene a `speed`. */
+const factorOf = ({ speed, pitch }: DeckSound) => Math.abs(speed / pitch - 1) < 1e-6 ? 1 : speed / pitch
 export const DEFAULT_MANUAL: ManualMix = { x: 0, A: FLAT, B: FLAT, law: 'bass' }
 
 function mixAt(out: ManualMix, c: Config, t: number) {
@@ -94,19 +101,26 @@ function applyChannel(channel: Channel, gain: number, eq: EQ, when: number, smoo
 
 export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options) {
   const [media, setMedia] = useState({ A: EMPTY_MEDIA, B: EMPTY_MEDIA })
-  const { placement, length, rate, auto, style, manual, automation, held, bar, onFrame } = options
+  const { placement, length, rate, sound, auto, style, manual, automation, held, bar, onFrame } = options
   const durA = media.A.duration, durB = media.B.duration
   const timing = useMemo(() => {
     if (!decks) return null
     const { A, B } = decks
     return makeTiming(A, B, placement, rate, length, durA ?? A.dur, durB ?? B.dur)
   }, [decks, placement, rate, length, durA, durB])
-  const config = useRef<Config>({ auto, style, manual, automation, held, bar, timing, rate, onFrame })
-  config.current = { auto, style, manual, automation, held, bar, timing, rate, onFrame }
+  const config = useRef<Config>({ auto, style, manual, automation, held, bar, timing, rate, sound, onFrame })
+  config.current = { auto, style, manual, automation, held, bar, timing, rate, sound, onFrame }
   const engine = useRef<Engine | null>(null)
   const buffers = useRef<{ A: AudioBuffer | null; B: AudioBuffer | null }>({ A: null, B: null })
-  const transport = useRef<{ A: Voice | null; B: Voice | null; start: number; clock: number; playing: boolean }>({
-    A: null, B: null, start: 0, clock: 0, playing: false,
+  // cada deck estirado a su velocidad sin tocar el tono (WSOLA en un worker); el tono final lo da playbackRate.
+  // playbackRate solo cambiaría velocidad y tono juntos, como un vinilo.
+  const stretched = useRef<Record<Side, { buffer: AudioBuffer; factor: number } | null>>({ A: null, B: null })
+  const [decoded, setDecoded] = useState<Record<Side, AudioBuffer | null>>({ A: null, B: null })
+  const [ready, setReady] = useState<Record<Side, boolean>>({ A: false, B: false })
+  const primed = useRef(false)
+  // start: tiempo de la mezcla (segundos de A original) en `clock`; avanza a `speed` (la velocidad de A) por segundo real
+  const transport = useRef<{ A: Voice | null; B: Voice | null; start: number; clock: number; speed: number; playing: boolean }>({
+    A: null, B: null, start: 0, clock: 0, speed: 1, playing: false,
   })
   const sample = useRef({ ...DEFAULT_MANUAL })
   const [error, setError] = useState<string | null>(null)
@@ -115,7 +129,7 @@ export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options
 
   const virtualT = useCallback(() => {
     const e = transport.current, ctx = engine.current?.ctx
-    return e.playing && ctx ? e.start + Math.max(0, ctx.currentTime - e.clock) : e.start
+    return e.playing && ctx ? e.start + Math.max(0, ctx.currentTime - e.clock) * e.speed : e.start
   }, [])
 
   const apply = useCallback((time: number, smooth = 0.018) => {
@@ -145,15 +159,20 @@ export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options
     } catch { /* la fuente ya terminó */ }
   }, [])
 
-  const startVoice = useCallback((side: Side, when: number, pos: number, speed: number) => {
+  /** `pos` en segundos del tema original; `when` en el reloj del AudioContext. */
+  const startVoice = useCallback((side: Side, when: number, pos: number) => {
     stopVoice(side, when)
     const e = engine.current, buffer = buffers.current[side]
     if (!e || !buffer || pos >= buffer.duration) return
+    const { speed } = config.current.sound[side]
     const start = Math.max(0, pos)
     const at = when + (start - pos) / speed
+    // si la versión estirada justa todavía se está calculando, se usa la que haya (el tono queda corrido un momento)
+    const s = stretched.current[side]
+    const factor = s?.factor ?? 1
     const source = e.ctx.createBufferSource()
-    source.buffer = buffer
-    source.playbackRate.value = speed
+    source.buffer = s?.buffer ?? buffer
+    source.playbackRate.value = speed / factor
     const gain = e.ctx.createGain()
     gain.gain.value = 0
     source.connect(gain).connect(e[side].bands[0])
@@ -164,7 +183,7 @@ export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options
       source.disconnect()
       gain.disconnect()
     }
-    source.start(at, start)
+    source.start(at, start / factor)
     transport.current[side] = { source, gain }
   }, [stopVoice])
 
@@ -173,7 +192,7 @@ export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options
     if (!timing) return
     const actual = Math.max(time, timing.cueT)
     stopVoice('B', when)
-    startVoice('B', when + actual - time, timing.bStart + (actual - timing.cueT) * rate, rate)
+    startVoice('B', when + (actual - time) / transport.current.speed, timing.bStart + (actual - timing.cueT) * rate)
   }, [startVoice, stopVoice])
 
   const startAt = useCallback((time: number) => {
@@ -182,8 +201,19 @@ export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options
     const when = e.ctx.currentTime + 0.06
     transport.current.start = time
     transport.current.clock = when
-    startVoice('A', when, time, 1)
+    transport.current.speed = config.current.sound.A.speed
+    startVoice('A', when, time)
     startB(time, when)
+  }, [startB, startVoice])
+
+  /** Rearranca un deck donde está sonando (cambió su tono o llegó su versión estirada). */
+  const restart = useCallback((side: Side) => {
+    const e = engine.current, t = transport.current
+    if (!e || !t.playing) return
+    const when = Math.max(e.ctx.currentTime + 0.025, t.clock)
+    const time = t.start + (when - t.clock) * t.speed
+    if (side === 'A') startVoice('A', when, time)
+    else startB(time, when)
   }, [startB, startVoice])
 
   const pause = useCallback((time = virtualT()) => {
@@ -211,7 +241,7 @@ export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options
   const toggle = useCallback(() => {
     const e = engine.current, { timing, onFrame } = config.current
     const t = transport.current
-    if (!e || !timing || !buffers.current.A || !buffers.current.B) return
+    if (!e || !timing || !buffers.current.A || !buffers.current.B || !primed.current) return
     if (t.playing) { pause(); return }
     void e.ctx.resume().catch(() => {
       if (engine.current !== e) return
@@ -254,6 +284,7 @@ export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options
         const buffer = await new Promise<AudioBuffer>((ok, error) => { void ctx!.decodeAudioData(raw, ok, error)?.catch(error) })
         if (abort.signal.aborted) return
         buffers.current[side] = buffer
+        setDecoded((d) => ({ ...d, [side]: buffer }))
         setMedia((m) => ({ ...m, [side]: { duration: buffer.duration, peaks: null } }))
         stopPeaks.push(buildPeaks(buffer, (peaks) => {
           setMedia((m) => ({ ...m, [side]: { duration: buffer.duration, peaks } }))
@@ -270,23 +301,68 @@ export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options
       stopVoice('A')
       stopVoice('B')
       buffers.current.A = buffers.current.B = null
+      stretched.current = { A: null, B: null }
+      primed.current = false
+      setDecoded({ A: null, B: null })
       transport.current.playing = false
       engine.current = null
       void ctx?.close().catch(() => {})
     }
   }, [apply, decks, stopVoice, virtualT])
 
+  const factorA = factorOf(sound.A), factorB = factorOf(sound.B)
+  const stretchSide = useCallback((side: Side, buffer: AudioBuffer | null, factor: number) => {
+    if (!buffer) { setReady((r) => r[side] ? { ...r, [side]: false } : r); return }
+    const current = stretched.current[side]
+    if (factor === 1 || current?.factor === factor) {
+      if (factor === 1 && current) { stretched.current[side] = null; restart(side) }
+      setReady((r) => r[side] ? r : { ...r, [side]: true })
+      return
+    }
+    setReady((r) => r[side] ? { ...r, [side]: false } : r)
+    let worker: Worker | null = null
+    // mientras se arrastra el tempo o el tono no se larga un cálculo por cada paso
+    const timer = window.setTimeout(() => {
+      worker = new Worker(new URL('./stretch.worker.ts', import.meta.url), { type: 'module' })
+      const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i).slice())
+      worker.onmessage = (event: MessageEvent<Float32Array[]>) => {
+        worker?.terminate()
+        const e = engine.current
+        if (!e || buffers.current[side] !== buffer) return
+        const out = event.data
+        const result = e.ctx.createBuffer(out.length, out[0].length, buffer.sampleRate)
+        out.forEach((data, i) => result.copyToChannel(data, i))
+        stretched.current[side] = { buffer: result, factor }
+        setReady((r) => ({ ...r, [side]: true }))
+        restart(side)
+      }
+      worker.onerror = () => { worker?.terminate(); setError(`No pude ajustar el tempo de ${side}.`) }
+      worker.postMessage({ channels, sampleRate: buffer.sampleRate, rate: factor }, channels.map((c) => c.buffer))
+    }, current ? 220 : 0)
+    return () => { window.clearTimeout(timer); worker?.terminate() }
+  }, [restart])
+  useEffect(() => stretchSide('A', decoded.A, factorA), [decoded.A, factorA, stretchSide])
+  useEffect(() => stretchSide('B', decoded.B, factorB), [decoded.B, factorB, stretchSide])
+  const allReady = ready.A && ready.B
+  if (allReady && decoded.A && decoded.B) primed.current = true
+
+  // cambió la velocidad de A: el reloj de la mezcla corre distinto, se reacomoda todo desde donde está
+  const speedA = sound.A.speed
+  useLayoutEffect(() => {
+    const t = transport.current
+    if (!t.playing || t.speed === speedA) return
+    startAt(virtualT())
+  }, [speedA, startAt, virtualT])
+  const pitchA = sound.A.pitch, pitchB = sound.B.pitch
+  useLayoutEffect(() => { restart('A') }, [pitchA, restart])
+  useLayoutEffect(() => { restart('B') }, [pitchB, restart])
+
   const mixT = timing?.mixT, cueT = timing?.cueT, bStart = timing?.bStart
   useLayoutEffect(() => {
     apply(virtualT())
   }, [apply, virtualT, timing, auto, style, manual, automation, held])
 
-  useLayoutEffect(() => {
-    const e = engine.current, t = transport.current
-    if (!e || !t.playing) return
-    const when = Math.max(e.ctx.currentTime + 0.025, t.clock)
-    startB(t.start + when - t.clock, when)
-  }, [mixT, cueT, bStart, rate, startB])
+  useLayoutEffect(() => { restart('B') }, [mixT, cueT, bStart, rate, restart])
 
   useEffect(() => {
     if (!playing) return
@@ -325,7 +401,12 @@ export function useMixAudio(decks: { A: Deck; B: Deck } | null, options: Options
     T: virtualT(), playing: transport.current.playing, ctx: engine.current?.ctx.state, ctxTime: engine.current?.ctx.currentTime,
     A: !!transport.current.A, B: !!transport.current.B,
     gA: engine.current?.A.level.gain.value, gB: engine.current?.B.level.gain.value,
+    voices: Object.fromEntries(SIDES.map((side) => {
+      const v = transport.current[side]
+      return [side, v && { playbackRate: v.source.playbackRate.value, bufferDur: v.source.buffer?.duration, origDur: buffers.current[side]?.duration }]
+    })),
   }), [virtualT])
 
-  return { engine, media, timing, error, playing, virtualT, seek, toggle, snapshot, debug }
+  const adjusting = SIDES.filter((side) => decoded[side] && !ready[side])
+  return { engine, media, timing, error, playing, primed: primed.current || allReady, adjusting, virtualT, seek, toggle, snapshot, debug }
 }

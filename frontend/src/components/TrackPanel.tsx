@@ -6,7 +6,7 @@ import { sourceLabel } from '../sources'
 import { useApp, usePlayer } from '../store'
 import type { Recommendation, Relation, Track, TrackDetail } from '../types'
 import { cleanTitle, compatibleKeys, fmtBpm, fmtDate, fmtTime, keyColor, ROLE_CATEGORIES } from '../util'
-import { EnergyEditor, KeyBadge, Sleeve, Stars } from './bits'
+import { EnergyEditor, KeyBadge, KeyText, Sleeve, Stars } from './bits'
 import { groupTags } from './FilterBar'
 import { IconFinder, IconLink, IconMix, IconPause, IconPlay, IconPlus, IconSearch, IconThumbDown, IconThumbUp, IconX } from './icons'
 import { LiveWaveform, useWaveform } from './Waveform'
@@ -69,17 +69,51 @@ function SourceAnalysis({ sources }: { sources: TrackSource[] | 'error' }) {
 }
 
 /** Una sola línea gris debajo del título: artista · 144 BPM · 4A (en su color) · algo más. */
+const PROGRAM: Record<string, string> = { rekordbox: 'rekordbox', traktor: 'Traktor', serato: 'Serato' }
+
+/** De dónde sale el BPM y el tono de este tema, en una línea: así se entiende por qué puede diferir de otro programa. */
+function AnalysisOrigin({ d }: { d: TrackDetail }) {
+  const prog = PROGRAM[d.source] ?? null
+  const bpmFrom = d.analyzed === 'audio' ? 'Batea' : prog ?? 'Batea'
+  let key: string
+  if (!d.key) key = prog ? `${prog} no analizó el tono de este tema (activalo en ${prog} o completalo en Analizar e importar)` : 'sin tono todavía'
+  else if (d.key_est) key = 'estimado por Batea (puede no coincidir con rekordbox)'
+  else if (prog && d.analyzed !== 'audio') key = prog
+  else key = 'Batea o la etiqueta del archivo'
+  return <div className="origin faint">BPM: {bpmFrom} · Tono: {key}</div>
+}
+
 function Meta({ artist, bpm, k, extra }: { artist?: string | null; bpm?: number | null; k?: string | null; extra?: string | null }) {
   const parts: React.ReactNode[] = []
   if (artist) parts.push(artist)
   if (bpm) parts.push(`${fmtBpm(bpm)} BPM`)
-  if (k) parts.push(<b key="k" className="keytxt" style={{ color: keyColor(k) }}>{k}</b>)
+  if (k) parts.push(<b key="k" className="keytxt" style={{ color: keyColor(k) }}><KeyText k={k} /></b>)
   if (extra) parts.push(extra)
   return <div className="meta ellipsis">{parts.map((p, i) => <span key={i}>{i > 0 && ' · '}{p}</span>)}</div>
 }
 
 /** El motivo de una sugerencia en palabras simples (el motor lo manda pensado para la IA: "4B→4A relativa mayor/menor (tono estimado)"). */
-export function plainReason(reasons: string[]): string | null {
+export function plainReason(reasons: string[], why?: string[]): string | null {
+  const phrases = [...(why ?? []).slice(0, 2)]
+  const tone = keyPhrase(reasons)
+  if (tone && phrases.length < 3) phrases.push(tone)
+  if (phrases.length) return phrases.join(' · ')
+  return legacyReason(reasons)
+}
+
+function keyPhrase(reasons: string[]): string | null {
+  const k = reasons.find((x) => x.includes('→'))
+  if (!k) return null
+  const est = k.includes('estimado') ? ' (estimado)' : ''
+  if (k.includes('misma tonalidad')) return 'Mismo tono' + est
+  if (k.includes('tonalidad vecina')) return 'Tono vecino' + est
+  if (k.includes('relativa')) return 'Tono relativo' + est
+  if (k.includes('salto de energía')) return 'Tono que levanta' + est
+  if (k.includes('diagonal')) return 'Tono compatible' + est
+  return null
+}
+
+function legacyReason(reasons: string[]): string | null {
   const find = (re: RegExp) => reasons.find((x) => re.test(x))
   const h = find(/^lo mezclaste/)
   if (h) return h.replace(/^l/, 'L')
@@ -253,6 +287,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
           <div><span className="eyebrow">Outro</span><span className="v">{d.outro_bars ?? '–'}<small> compases</small></span></div>
           <div><span className="eyebrow">Tocado</span><span className="v">{d.play_count}<small> veces</small></span></div>
         </div>
+        <AnalysisOrigin d={d} />
 
         <div className="section">
           <div className="section-h"><span className="eyebrow">Puntaje</span><Stars big value={d.rating} onChange={(v) => update({ rating: v })} /></div>
@@ -347,7 +382,7 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
           ))}
         </div>
 
-        <div className="section">
+        <div className="section" data-tour="recs">
           <div className="section-h">
             <span className="eyebrow">Qué va después</span>
             {crateId && crateId !== 'all' && (
@@ -357,12 +392,13 @@ export function TrackPanel({ id: selectedId }: { id: number | null }) {
               </Seg>
             )}
           </div>
+          <div className="faint rec-hint">Temas que encajan por BPM y tono y son de tu mismo estilo: lo que ya tocaste, tus playlists y carpetas. Pasá el mouse para ver todos los motivos.</div>
           {recs === null && <div className="faint">Buscando…</div>}
           <HoverList className="rel-list">
             {recs?.slice(0, allRecs ? 30 : 6).map((r) => {
-              const why = plainReason(r.reasons)
+              const why = plainReason(r.reasons, r.why)
               return (
-              <div key={r.id} data-fh className="rel" role="button" tabIndex={0} onClick={() => select(r.id)}>
+              <div key={r.id} data-fh className="rel" role="button" tabIndex={0} onClick={() => select(r.id)} title={`Por qué: ${r.reasons.join(' · ')}`}>
                 <div className="thumb"><Sleeve id={r.id} title={r.track.title} trackKey={r.track.key} hasArt={r.track.has_art} size="s" px={34} /></div>
                 <div style={{ minWidth: 0 }}>
                   <div className="t ellipsis">{cleanTitle(r.track.title)}</div>

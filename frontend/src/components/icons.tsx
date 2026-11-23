@@ -109,3 +109,9 @@ export const IconSettings = ({ size, ...p }: P) => (
 export const IconMinus = ({ size, ...p }: P) => (
   <svg {...base(size)} {...p}><path d="M5 12h14" /></svg>
 )
+export const IconChart = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}><path d="M3 20h18" /><path d="M4 16l4.5-5 3.5 3 4-7 4 4" /></svg>
+)
+export const IconAlert = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}><path d="M12 4 2.8 19.5a.6.6 0 0 0 .5.9h17.4a.6.6 0 0 0 .5-.9z" /><path d="M12 10v4.2M12 17.2v.1" /></svg>
+)

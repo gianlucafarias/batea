@@ -3,7 +3,7 @@ import { api } from '../api'
 import { useApp, usePlayer } from '../store'
 import type { Tag, Track } from '../types'
 import { cleanTitle, fmtBpm, fmtTime } from '../util'
-import { energyColor, KeyBadge, Sleeve, Stars } from './bits'
+import { energyColor, KeyBadge, KeyText, Sleeve, Stars } from './bits'
 import { groupTags } from './FilterBar'
 import { IconCheck, IconPause, IconPlay, IconX } from './icons'
 import { GlyphSwap, useFluidHover } from '../lib/fluidHover'
@@ -281,7 +281,7 @@ export function Tagger() {
                 <span className="tg-q-n num">{done.has(x.id) ? <IconCheck size={12} /> : idx + 1}</span>
                 <span style={{ minWidth: 0 }}>
                   <span className="ellipsis" style={{ display: 'block', fontWeight: 550 }}>{cleanTitle(x.title)}</span>
-                  <span className="ellipsis muted" style={{ display: 'block', fontSize: 11 }}>{x.artist || '—'} · {fmtBpm(x.bpm)}{x.key ? ` · ${x.key}` : ''}</span>
+                  <span className="ellipsis muted" style={{ display: 'block', fontSize: 11 }}>{x.artist || '—'} · {fmtBpm(x.bpm)}{x.key ? <> · <KeyText k={x.key} /></> : ''}</span>
                 </span>
               </button>
             )

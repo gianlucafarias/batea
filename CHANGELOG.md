@@ -3,6 +3,44 @@
 Cada vez que se arma un instalador nuevo se sube la versión (`./scripts/release.sh bump patch|minor|major`)
 y se anota acá, en lenguaje de quien usa Batea, qué cambió. Lo más nuevo arriba.
 
+## 0.5.0 — 2026-11-23
+
+**Gráfico de la caja**
+- «Ver gráfico» en cualquier caja o sesión del historial: la energía de cada tema con warm-up, subida, peak y cierre, el BPM y el tono de cada pasada. Sigue siempre el orden real (el de la caja, o lo que sonó en la sesión), aunque la lista esté ordenada por otra columna.
+- Debajo, «Para revisar»: saltos de tempo, choques de tono, caídas bruscas de energía, pasadas con poco margen para mezclar, pasadas que marcaste para evitar, peak muy temprano y tramos planos.
+- En cada pasada con problemas: «Tema puente» (temas que entran bien entre los dos, por tempo y tono de los dos lados) y «Reemplazar» (temas para poner en lugar del que entra). En tus cajas se agregan con un clic; en playlists y sesiones se ofrece una copia editable.
+- Arrastrá un tema dentro del gráfico para moverlo: la curva, las fases y los avisos se recalculan mientras lo movés.
+- Clic en un tema del gráfico lo abre en la ficha; doble clic lo escucha.
+- Energía: los temas analizados por Batea (fuera de rekordbox) quedaban casi todos en 10/10 porque se medían en otra escala. Ahora se traducen a la escala de rekordbox (medido en 80 temas analizados de las dos formas) y se recalcula toda la librería una vez al abrir.
+- El gráfico usa una energía con decimales en escala fija y acerca el eje al rango del set, así un set de techno fuerte que va de 7 a 10 muestra su recorrido en vez de una línea plana arriba.
+
+**Tus sesiones**
+- Nueva pantalla de estadísticas del historial (ícono al lado de «Historial de sesiones»): tu curva de energía típica, en qué momento del set llega tu peak, sesiones y BPM mes a mes, tus temas de peak, con qué abrís y con qué cerrás, las pasadas que más repetís y los temas que tocabas seguido y ya no. Por año, con todo el historial o solo tu universo.
+- Las sesiones del historial se ven completas aunque haya un universo activo (antes, las de otros géneros aparecían vacías).
+- Los temas que volviste a poner en una misma sesión ya no se pierden: la sesión se lee en el orden en que sonó, con las repeticiones.
+
+**Probar la mezcla**
+- Master tempo: al cambiar el tempo de B ya no cambia el tono (antes sonaba más agudo o más grave).
+- Tempo y tono por bandeja, «Sync» (B sigue el tempo de A) y la opción de apagar master tempo para mezclar como en vinilo.
+
+**Análisis**
+- BPM: el detector nuevo acierta en temas rápidos y con percusión en tresillo. El anterior daba 112 o 95 en temas de 140. Medido contra rekordbox en 300 temas al azar coincide en el 94% (en techno, en todos); lo que falla es sobre todo trap y edits que cambian de tempo.
+- «Completar tonalidades» explica que los tonos calculados son una pista y cómo hacer que rekordbox analice el tono, que es lo que muestran los CDJ.
+- En «Analizar e importar», un botón reanaliza los temas que pasaron por el análisis anterior, de a uno por vez.
+- La ficha de cada tema dice de dónde salen el BPM y el tono (rekordbox, Batea o estimado).
+
+**Tonalidad como en tu programa**
+- Ajustes → Preferencias: Camelot (8A), clásica como rekordbox y los CDJ (Am) u Open Key como Traktor (1m). Al pasar el mouse sobre un tono se ven las tres.
+
+**Qué va después**
+- Las sugerencias ahora tienen en cuenta tu estilo: lo que tocaste en las mismas sesiones, tus playlists y carpetas, el artista y el sello. Ya no aparece un reggaetón después de un hard techno por tener el mismo BPM. Medido con tu historial, el tema que tocaste después aparece entre los 10 primeros 3 veces más seguido.
+- Entre temas del mismo estilo van primero los que no chocan de tono. Los temas sin tonalidad ya no suben como si fueran compatibles.
+- Cada sugerencia dice por qué en palabras («Lo pusiste después 3 veces», «Juntos en «Peak»», «Mismo tono»). Al pasar el mouse se ven todos los motivos.
+
+**Primeros pasos**
+- Recorrido guiado al abrir Batea por primera vez: señala cada parte de la pantalla y explica para qué sirve. Se vuelve a ver con el botón «?».
+- Cada pantalla dice en una línea para qué sirve.
+
 ## 0.4.1 — 2026-11-19
 
 **Actualizar sin salir de Batea**

@@ -202,7 +202,7 @@ export function CamelotWheel({ scope, setScope, onMode }: Props) {
       <header className="viewhead">
         <div>
           <h1>Mapa</h1>
-          <div className="sub">{data ? plural(pts.length, 'tema', 'temas') : 'Cargando…'}</div>
+          <div className="sub">{data ? plural(pts.length, 'tema', 'temas') : 'Cargando…'} · Cada tono en su lugar: los vecinos de la rueda mezclan sin chocar.</div>
         </div>
         <div className="spacer" />
         <button className="btn ghost sm icon help-btn" aria-label="Cómo se usa" title="Click en un punto para ver la ficha · ⇧ + arrastrar para seleccionar">?</button>

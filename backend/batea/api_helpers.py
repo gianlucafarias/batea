@@ -26,7 +26,7 @@ EFFECTIVE_RATING = "COALESCE(t.rating, t.rb_rating, 0)"
 
 TRACK_COLUMNS = f"""
     t.id, t.title, t.artist, t.album, t.label, t.genre, t.remixer, t.bpm, t.key, t.duration,
-    {EFFECTIVE_RATING} AS rating, {EFFECTIVE_ENERGY} AS energy, t.energy AS energy_user, t.energy_auto,
+    {EFFECTIVE_RATING} AS rating, {EFFECTIVE_ENERGY} AS energy, t.energy AS energy_user, t.energy_auto, t.energy_fine,
     t.intro_bars, t.outro_bars, t.breaks, t.date_added, t.play_count, t.last_played, t.source,
     t.rb_color AS color, (t.rb_id IS NOT NULL) AS in_rb, t.path, (t.artwork IS NOT NULL) AS has_art, t.year, t.filetype, t.bitrate, t.hidden,
     (t.key_source = 'batea') AS key_est, (t.reviewed IS NOT NULL) AS reviewed,
@@ -150,6 +150,12 @@ def _query_parts(c: sqlite3.Connection, crate: str | None, filters: dict, use_un
     extra, extra_params, smart = crate_filter(c, crate)
     merged = {**smart, **{k: v for k, v in filters.items() if v not in (None, "", [])}}
     where = build_where(merged, params)
+    # una sesión del historial es lo que tocaste esa noche: se ve entera aunque haya un universo activo
+    # (filtrada quedaba vacía o salteaba temas, y el gráfico unía temas que no sonaron seguidos)
+    if use_universe and crate and crate.isdigit():
+        k = c.execute("SELECT kind FROM crates WHERE id=?", (int(crate),)).fetchone()
+        if k and k["kind"] == "session":
+            use_universe = False
     uni = universe.clause(c) if use_universe else None
     if uni:
         where.append(uni[0])

@@ -1,4 +1,6 @@
 import type { Crate, DiscoverState, FolderNode, EditorCrate, Filters, Grid, Job, KeyStatus, Recommendation, StyleProfile, Tag, Track, TrackDetail, UniverseList, Waveform } from './types'
+import type { PassInfo } from './lib/setAnalysis'
+import type { SessionStats, Suggestion } from './types'
 
 /** Pedido que llegó desde afuera: un link batea:// o un aviso del MCP */
 export interface OpenTarget { kind: 'tema' | 'caja' | 'carpeta' | 'artista' | 'refresh'; value?: string; play?: boolean }
@@ -257,6 +259,12 @@ export const api = {
 
   relate: (a: number, b: number, kind: string, note?: string) => post('/api/relations', { a, b, kind, note }),
   unrelate: (id: number) => del(`/api/relations/${id}`),
+  setSuggest: (prev: number | null, next: number | null, exclude: number[]) =>
+    post<{ items: Suggestion[] }>('/api/set/suggest', { prev, next, exclude }),
+  sessionPlays: (id: number | string) => get<{ ids: number[] }>(`/api/sessions/${id}/plays`),
+  sessionStats: (year: number | null, allMusic: boolean) =>
+    get<SessionStats>(`/api/sessions/stats?${year ? `year=${year}&` : ''}all_music=${allMusic}`),
+  setTransitions: (ids: number[]) => post<{ transitions: PassInfo[] }>('/api/set/transitions', { ids }),
   mixSettings: (a: number, b: number) => get<{ saved: Record<string, unknown> | null }>(`/api/mixes/${a}/${b}`),
   saveMixSettings: (a: number, b: number, settings: Record<string, unknown>) => put(`/api/mixes/${a}/${b}`, { settings }),
   reorderCrate: (id: number, trackIds: number[]) => put(`/api/crates/${id}/order`, { track_ids: trackIds }),
@@ -280,6 +288,8 @@ export const api = {
   ignoreFolder: (folder: string) => post<{ quitados: number; ocultos: number }>('/api/discover/ignore', { folder }),
   analyzeTracks: (track_ids: number[]) => post<Job>('/api/analyze/tracks', { track_ids }),
   analyzeQueue: () => get<{ now: number | null; ids: number[] }>('/api/analyze/queue'),
+  analyzeOutdated: () => get<{ count: number; online: number; version: number }>('/api/analyze/outdated'),
+  reanalyzeOutdated: () => post<Job>('/api/analyze/outdated', {}),
   analyzeFound: (folder: string) => post<Job>('/api/discover/analyze', { folder }),
   folders: () => get<FolderNode[]>('/api/folders'),
   revealFolder: (folder: string) => post<{ ok: boolean }>('/api/discover/reveal', { folder }),

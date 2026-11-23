@@ -4,17 +4,20 @@ import { GlyphSwap } from '../lib/fluidHover'
 import { useApp } from '../store'
 import { cleanTitle, fmtBpm, parseKey } from '../util'
 import { KeyBadge, Sleeve } from './bits'
+import { formatKey, useKeyNotation } from '../lib/keyNotation'
 import { IconMix, IconPause, IconPlay, IconSwap, IconThumbDown, IconThumbUp, IconX } from './icons'
 import { MixPicker } from './MixPicker'
 import { bandLane, groupOf, parseSaved, preset, scale, upsert, type Automation, type Held, type LaneGroup, type LaneId, type Point, type SavedMix } from './mixlab/automation'
 import { CenterMixer, DeckEQ, MixHelp, Stepper, type TransitionLength } from './mixlab/Controls'
 import { Timeline, type TimelineHandle } from './mixlab/Timeline'
-import { barAt, beatAt, clamp, defaultEntry, makeDeck, phaseOffset, playbackRate, signed, type Deck, type Placement, type Side, type Transition } from './mixlab/model'
-import { DEFAULT_MANUAL, useMixAudio, type ManualMix } from './mixlab/useMixAudio'
+import { barAt, beatAt, clamp, defaultEntry, FLAT_TUNE, KEY_LIMIT, keyMatch, makeDeck, phaseOffset, playbackRate, shiftKey, signed, TEMPO_LIMIT, type Deck, type DeckTune, type Placement, type Side, type Transition } from './mixlab/model'
+import { DEFAULT_MANUAL, useMixAudio, type DeckSound, type ManualMix } from './mixlab/useMixAudio'
 
-function keyRelation(a: string | null, b: string | null): { text: string; tone: 'ok' | 'mid' | 'bad' | 'none' } {
+function keyRelation(a: string | null, b: string | null, detune = 0): { text: string; tone: 'ok' | 'mid' | 'bad' | 'none' } {
   const pa = parseKey(a), pb = parseKey(b)
   if (!pa || !pb) return { text: 'falta el tono de alguno', tone: 'none' }
+  // sin master tempo la velocidad corre el tono una fracción de semitono: entre los dos quedan desafinados
+  if (Math.abs(detune) >= 0.3) return { text: `desafinados ${Math.abs(detune).toFixed(1).replace('.', ',')} semitono`, tone: 'bad' }
   const d = Math.min(Math.abs(pa[0] - pb[0]) % 12, 12 - (Math.abs(pa[0] - pb[0]) % 12))
   if (d === 0 && pa[1] === pb[1]) return { text: 'misma tonalidad', tone: 'ok' }
   if (d === 1 && pa[1] === pb[1]) return { text: 'tonalidad vecina', tone: 'ok' }
@@ -32,7 +35,16 @@ export function MixLab() {
   return <MixInner key={`${mix.a}-${mix.b}`} a={mix.a} b={mix.b} />
 }
 
-function DeckCard({ deck: d, side, pitch = 0 }: { deck: Deck; side: Side; pitch?: number }) {
+const pct = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1).replace('.', ',')}`
+const semi = (v: number) => {
+  const r = Math.round(v * 10) / 10
+  return `${r > 0 ? '+' : r < 0 ? '−' : ''}${Number.isInteger(r) ? Math.abs(r) : Math.abs(r).toFixed(1).replace('.', ',')}`
+}
+
+function DeckCard({ deck: d, side, tempo, semis, keylock }: { deck: Deck; side: Side; tempo: number; semis: number; keylock: boolean }) {
+  const speed = 1 + tempo / 100
+  const key = shiftKey(d.t.key, semis)
+  const shifted = Math.abs(semis) >= 0.05
   return (
     <div className={`mx-deck ${side}`}>
       <div className="mx-sleeve">
@@ -44,10 +56,11 @@ function DeckCard({ deck: d, side, pitch = 0 }: { deck: Deck; side: Side; pitch?
         <div className="mx-deck-title ellipsis" title={cleanTitle(d.t.title)}>{cleanTitle(d.t.title)}</div>
         {d.t.artist && <div className="mx-artist muted ellipsis">{d.t.artist}</div>}
         <div className="mx-deck-meta">
-          <span className="num">{fmtBpm(d.g.bpm)} BPM</span>
-          <KeyBadge k={d.t.key} est={!!d.t.key_est} />
-          {Math.abs(pitch) > 0.05 && <span className={`num mx-pitch${Math.abs(pitch) > 6 ? ' large' : ''}`}
-            title="Varía la velocidad y el tono, como en un CDJ sin Master Tempo">{pitch > 0 ? '+' : ''}{pitch.toFixed(1)}% pitch</span>}
+          <span className="num" title={Math.abs(tempo) >= 0.05 ? `Original: ${fmtBpm(d.g.bpm)} BPM` : undefined}>{fmtBpm(d.g.bpm ? d.g.bpm * speed : d.g.bpm)} BPM</span>
+          <span title={shifted ? `Original: ${formatKey(d.t.key, useKeyNotation.getState().notation) || '–'}` : undefined}><KeyBadge k={key} est={!!d.t.key_est} /></span>
+          {Math.abs(tempo) >= 0.05 && <span className={`num mx-pitch${Math.abs(tempo) > 6 ? ' large' : ''}`}
+            title={keylock ? 'Velocidad cambiada, tono intacto (master tempo)' : 'Velocidad y tono cambian juntos, como un vinilo'}>{pct(tempo)}%</span>}
+          {shifted && <span className="num mx-pitch" title="Corrimiento de tono">{semi(semis)} st</span>}
           {!d.t.online && <span className="muted">Sin conexión</span>}
         </div>
       </div>
@@ -77,6 +90,9 @@ function MixInner({ a, b }: { a: number; b: number }) {
   const [showCues, setShowCues] = useState(() => { try { return localStorage.getItem('batea.mixlab.cues') !== '0' } catch { return true } })
   const toggleCues = (v: boolean) => { setShowCues(v); try { localStorage.setItem('batea.mixlab.cues', v ? '1' : '0') } catch { /* sin storage */ } }
   const [pickB, setPickB] = useState(false)
+  const [tune, setTune] = useState<DeckTune>(FLAT_TUNE)
+  const [keylock, setKeylock] = useState(() => { try { return localStorage.getItem('batea.mixlab.keylock') !== '0' } catch { return true } })
+  const toggleKeylock = (v: boolean) => { setKeylock(v); try { localStorage.setItem('batea.mixlab.keylock', v ? '1' : '0') } catch { /* sin storage */ } }
   const [time, setTime] = useState(0)
   const timeline = useRef<TimelineHandle>(null)
   const modal = useRef<HTMLDivElement>(null)
@@ -105,6 +121,10 @@ function MixInner({ a, b }: { a: number; b: number }) {
           setLength(([8, 16, 32, 64].includes(saved.length) ? saved.length : 16) as TransitionLength)
           setAutomation(saved.automation)
           setCustom(saved.custom)
+          if (saved.tune) setTune({
+            tempoA: clamp(saved.tune.tempoA, -TEMPO_LIMIT.A, TEMPO_LIMIT.A), tempoB: clamp(saved.tune.tempoB, -TEMPO_LIMIT.B, TEMPO_LIMIT.B),
+            keyA: clamp(Math.round(saved.tune.keyA), -KEY_LIMIT, KEY_LIMIT), keyB: clamp(Math.round(saved.tune.keyB), -KEY_LIMIT, KEY_LIMIT), sync: saved.tune.sync,
+          })
           setSavedMix(saved)
         } else setPlacement({ ...INITIAL_PLACEMENT, mixBar: defaultEntry(A) })
         setDecks({ A, B })
@@ -113,7 +133,18 @@ function MixInner({ a, b }: { a: number; b: number }) {
     return () => { alive = false }
   }, [a, b])
 
-  const rate = useMemo(() => decks ? playbackRate(decks.A, decks.B) : 1, [decks])
+  const syncRatio = useMemo(() => decks ? playbackRate(decks.A, decks.B) : 1, [decks])
+  // velocidad real de cada deck; `rate` es cuánto avanza B por segundo de A (lo que usa la grilla)
+  const speedA = 1 + tune.tempoA / 100
+  const speedB = tune.sync ? speedA * syncRatio : 1 + tune.tempoB / 100
+  const rate = speedB / speedA
+  const tempoB = (speedB - 1) * 100
+  const semisA = tune.keyA + (keylock ? 0 : 12 * Math.log2(speedA))
+  const semisB = tune.keyB + (keylock ? 0 : 12 * Math.log2(speedB))
+  const sound = useMemo<Record<Side, DeckSound>>(() => ({
+    A: { speed: speedA, pitch: 2 ** (semisA / 12) },
+    B: { speed: speedB, pitch: 2 ** (semisB / 12) },
+  }), [speedA, speedB, semisA, semisB])
   const onFrame = useCallback((t: number, playing: boolean) => {
     timeline.current?.playhead(t, playing)
     const now = performance.now()
@@ -123,9 +154,22 @@ function MixInner({ a, b }: { a: number; b: number }) {
     }
   }, [])
 
-  const { engine, media, timing, error: audioError, playing, virtualT, seek: seekEngine, toggle, snapshot, debug } = useMixAudio(decks, {
-    ...mixer, style, rate, placement, length, onFrame, automation, held, bar: decks?.A.bar ?? 2,
+  const { engine, media, timing, error: audioError, playing, primed, adjusting, virtualT, seek: seekEngine, toggle, snapshot, debug } = useMixAudio(decks, {
+    ...mixer, style, rate, sound, placement, length, onFrame, automation, held, bar: decks?.A.bar ?? 2,
   })
+
+  const round1 = (v: number) => Math.round(v * 10) / 10
+  const stepTempo = (side: Side, dir: number, big: boolean) => setTune((t) => {
+    const step = dir * (big ? 1 : 0.1)
+    if (side === 'A') return { ...t, tempoA: round1(clamp(t.tempoA + step, -TEMPO_LIMIT.A, TEMPO_LIMIT.A)) }
+    // mover el tempo de B lo suelta de A (como el pitch de un CDJ con sync)
+    return { ...t, sync: false, tempoB: round1(clamp((t.sync ? tempoB : t.tempoB) + step, -TEMPO_LIMIT.B, TEMPO_LIMIT.B)) }
+  })
+  const stepKey = (side: Side, dir: number) => setTune((t) => {
+    const k = side === 'A' ? 'keyA' : 'keyB'
+    return { ...t, [k]: clamp(t[k] + dir, -KEY_LIMIT, KEY_LIMIT) }
+  })
+  const setSync = (on: boolean) => setTune((t) => on ? { ...t, sync: true } : { ...t, sync: false, tempoB: round1(tempoB) })
   // al pausar o saltar, los controles agarrados a mano vuelven a seguir su curva
   useEffect(() => { if (!playing) setHeld((h) => Object.keys(h).length ? {} : h) }, [playing])
   const seek = useCallback((t: number) => {
@@ -201,7 +245,7 @@ function MixInner({ a, b }: { a: number; b: number }) {
       state: () => {
         const { x, A: eqA, B: eqB, law } = snapshot()
         return {
-          ...debug(), ...timing, ...placement, rate, fadeBars: length, style, auto: mixer.auto,
+          ...debug(), ...timing, ...placement, rate, sound, tune, keylock, adjusting, fadeBars: length, style, auto: mixer.auto,
           durB: media.B.duration ?? decks?.B.dur, phaseMs: decks && timing ? Math.round(phaseOffset(decks.A, timing.cueT) * 1000) : 0,
           x, eqA, eqB, law, ...timeline.current?.state(),
           peaksA: !!media.A.peaks, peaksB: !!media.B.peaks,
@@ -210,7 +254,7 @@ function MixInner({ a, b }: { a: number; b: number }) {
       audio: engine,
     }
     return () => { delete w.__mix }
-  }, [debug, timing, placement, rate, length, style, mixer.auto, decks, snapshot, media, engine])
+  }, [debug, timing, placement, rate, sound, tune, keylock, adjusting, length, style, mixer.auto, decks, snapshot, media, engine])
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -283,8 +327,12 @@ function MixInner({ a, b }: { a: number; b: number }) {
   const { A, B } = decks
   const { mixT, cueT, durA } = timing
   const online = A.t.online && B.t.online
-  const canPlay = online && media.A.duration !== null && media.B.duration !== null
-  const kr = keyRelation(A.t.key, B.t.key)
+  const canPlay = online && media.A.duration !== null && media.B.duration !== null && primed
+  const keyA = shiftKey(A.t.key, semisA), keyB = shiftKey(B.t.key, semisB)
+  const fraction = (v: number) => v - Math.round(v)
+  const kr = keyRelation(keyA, keyB, fraction(semisB - semisA))
+  const matchB = kr.tone === 'none' ? null : keyMatch(keyB, keyA, tune.keyB)
+  const adjustText = adjusting.length ? `Ajustando ${adjusting.join(' y ')}${keylock ? ' sin cambiar el tono' : ''}…` : null
   const phaseMs = Math.round(nudge * 1000)
   const relativePhase = Math.round(phaseOffset(A, cueT) * 1000)
   const phaseLimit = Math.round(4 * A.bar * 1000)
@@ -292,8 +340,8 @@ function MixInner({ a, b }: { a: number; b: number }) {
   const count = time < mixT ? Math.max(1, mixBar - barNow) : A.db.length - barNow
   const countDown = `${count} ${count === 1 ? 'compás' : 'compases'}`
   const status = !online ? 'Audio sin conexión'
-    : audioError ?? (!canPlay ? 'Preparando audio…'
-      : time < mixT ? `B entra en ${countDown}` : time < durA ? `A termina en ${countDown}` : time < timing.end ? 'Solo B' : 'Fin de la mezcla')
+    : audioError ?? (!canPlay ? (adjustText ?? 'Preparando audio…') : adjustText
+      ?? (time < mixT ? `B entra en ${countDown}` : time < durA ? `A termina en ${countDown}` : time < timing.end ? 'Solo B' : 'Fin de la mezcla'))
   const intro = clamp(B.t.intro_bars ?? 0, 0, B.db.length - 1)
   const live = snapshot(time)
   const save = async (kind: 'mix' | 'mashup' | 'avoid') => {
@@ -305,7 +353,7 @@ function MixInner({ a, b }: { a: number; b: number }) {
       await api.relate(a, b, kind, note)
       if (kind !== 'avoid') {
         // también la mezcla en sí, para encontrarla armada al volver a abrirla
-        const mixState: SavedMix = { v: 1, mixBar, startBar, nudge, style, length, custom, automation }
+        const mixState: SavedMix = { v: 1, mixBar, startBar, nudge, style, length, custom, automation, tune }
         await api.saveMixSettings(a, b, mixState as unknown as Record<string, unknown>)
         setSavedMix(mixState)
       }
@@ -329,12 +377,12 @@ function MixInner({ a, b }: { a: number; b: number }) {
         </div>
 
         <div className="mx-decks">
-          <DeckCard deck={A} side="A" />
+          <DeckCard deck={A} side="A" tempo={tune.tempoA} semis={semisA} keylock={keylock} />
           <div className={`mx-tone ${kr.tone}`}>
             <span>Armonía</span>
             <b>{kr.text.charAt(0).toUpperCase() + kr.text.slice(1)}</b>
           </div>
-          <DeckCard deck={B} side="B" pitch={(rate - 1) * 100} />
+          <DeckCard deck={B} side="B" tempo={tempoB} semis={semisB} keylock={keylock} />
         </div>
 
         <Timeline ref={timeline} A={A} B={B} timing={timing} placement={placement} rate={rate} style={style}
@@ -351,6 +399,12 @@ function MixInner({ a, b }: { a: number; b: number }) {
               <input type="checkbox" checked={showCues} onChange={(e) => toggleCues(e.target.checked)} /> Mostrar cues
             </label>
           )}
+          <label className="ce-check" title="B sigue el tempo de A: el tempo de A acelera o frena toda la mezcla">
+            <input type="checkbox" checked={tune.sync} onChange={(e) => setSync(e.target.checked)} /> Sync
+          </label>
+          <label className="ce-check" title="Cambia la velocidad sin cambiar el tono. Apagado, el tono sube y baja con la velocidad, como un vinilo.">
+            <input type="checkbox" checked={keylock} onChange={(e) => toggleKeylock(e.target.checked)} /> Master tempo
+          </label>
           <span className={`mx-status ellipsis${audioError ? ' error' : ''}`} title={status}>{status}</span>
           <div className="mx-transport-end">
             {(A.g.approx || B.g.approx) && <span className="mx-grid-source" title={`Batea calculó la grilla de ${A.g.approx && B.g.approx ? 'A y B' : A.g.approx ? 'A' : 'B'}`}>Grilla estimada</span>}
@@ -368,6 +422,14 @@ function MixInner({ a, b }: { a: number; b: number }) {
                 min={1} max={A.db.length} unit="compases antes del final de A" resetTitle="Restablecer entrada de B"
                 onStep={(dir, e) => stepEntry(-dir * (e.shiftKey ? 8 : 1))}
                 onReset={() => setPlacementPatch({ mixBar: defaultEntry(A) })} />
+            </div>
+            <div className="mx-steppers two">
+              <Stepper label={tune.sync ? 'Tempo de la mezcla' : 'Tempo de A'} value={tune.tempoA} display={pct(tune.tempoA)}
+                min={-TEMPO_LIMIT.A} max={TEMPO_LIMIT.A} unit="%" resetTitle="Tempo original de A"
+                onStep={(dir, e) => stepTempo('A', dir, e.shiftKey)} onReset={() => setTune((t) => ({ ...t, tempoA: 0 }))} />
+              <Stepper label="Tono de A" value={tune.keyA} display={semi(tune.keyA)}
+                min={-KEY_LIMIT} max={KEY_LIMIT} unit="st" resetTitle="Tono original de A"
+                onStep={(dir) => stepKey('A', dir)} onReset={() => setTune((t) => ({ ...t, keyA: 0 }))} />
             </div>
           </section>
 
@@ -389,6 +451,15 @@ function MixInner({ a, b }: { a: number; b: number }) {
               <Stepper label="Fase de B" value={phaseMs} display={signed(phaseMs)}
                 min={-phaseLimit} max={phaseLimit} unit="ms" resetTitle="Restablecer fase de B"
                 onStep={(dir, e) => stepPhase(dir, e.shiftKey, e.altKey)} onReset={() => setPlacementPatch({ nudge: 0 })} />
+            </div>
+            <div className="mx-steppers two">
+              <Stepper label={tune.sync ? 'Tempo de B · sync' : 'Tempo de B'} value={round1(tempoB)} display={pct(tempoB)}
+                min={-TEMPO_LIMIT.B} max={TEMPO_LIMIT.B} unit="%" resetTitle="Volver a sync con A"
+                onStep={(dir, e) => stepTempo('B', dir, e.shiftKey)} onReset={() => setSync(true)} />
+              <Stepper label="Tono de B" value={tune.keyB} display={semi(tune.keyB)}
+                min={-KEY_LIMIT} max={KEY_LIMIT} unit="st" resetTitle="Tono original de B"
+                onStep={(dir) => stepKey('B', dir)} onReset={() => setTune((t) => ({ ...t, keyB: 0 }))}
+                quick={matchB ? { label: `Llevar a ${formatKey(shiftKey(keyB, matchB), useKeyNotation.getState().notation)} (${semi(matchB)} st)`, run: () => setTune((t) => ({ ...t, keyB: clamp(t.keyB + matchB, -KEY_LIMIT, KEY_LIMIT) })) } : undefined} />
             </div>
           </section>
         </div>

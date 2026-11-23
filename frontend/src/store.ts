@@ -4,9 +4,9 @@ import { api, audioUrl, isNotFound, type LibrarySource, type Status, type Update
 import { crateSource, isActiveJob } from './sources'
 import type { Crate, Filters, FolderNode, Job, Tag, Track, UniverseList } from './types'
 
-export type SettingsTab = 'programs' | 'agents' | 'about'
+export type SettingsTab = 'programs' | 'prefs' | 'agents' | 'about'
 
-export type View = 'home' | 'crate' | 'map' | 'inbox' | 'tagger'
+export type View = 'home' | 'crate' | 'map' | 'inbox' | 'tagger' | 'sessions'
 
 interface Toast { id: number; text: string; tone?: 'ok' | 'error'; leaving?: boolean; action?: { label: string; run: () => void } }
 
@@ -37,6 +37,9 @@ interface State {
   setCueEditor: (id: number | null) => void
   /** cajas que el diálogo de exportar trae marcadas al abrirse (si no, las de la vista actual) */
   exportPreset: string[] | null
+  /** recorrido guiado sobre la app (primer uso o botón Ayuda) */
+  tour: boolean
+  setTour: (v: boolean) => void
   settings: SettingsTab | null
   setSettings: (v: SettingsTab | null) => void
   setSourcesOpen: (v: boolean) => void
@@ -128,6 +131,8 @@ export const useApp = create<State>((set, get) => ({
   bumpCues: () => set((s) => ({ cueVersion: s.cueVersion + 1 })),
   setCueEditor: (id) => set({ cueEditorId: id }),
   exportPreset: null,
+  tour: false,
+  setTour: (tour) => set({ tour }),
   settings: null,
   setSettings: (settings) => set({ settings }),
   setSourcesOpen: (v) => set({ settings: v ? 'programs' : null }),

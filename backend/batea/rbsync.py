@@ -39,6 +39,38 @@ def snapshot() -> Path:
     return dst / "master.db"
 
 
+def write_session_plays(c: sqlite3.Connection, sessions: dict[str, list[tuple[int, int]]], crate_of: dict[str, int]) -> int:
+    """La secuencia completa de cada sesión (con los temas que volviste a poner), en el orden de rekordbox."""
+    c.execute("DELETE FROM session_plays WHERE crate_id IN (SELECT id FROM crates WHERE rb_id LIKE 'h:%')")
+    rows = []
+    for hid, items in sessions.items():
+        cid = crate_of.get(f"h:{hid}")
+        if cid:
+            rows.extend((cid, pos + 1, tid) for pos, (_, tid) in enumerate(sorted(items)))
+    c.executemany("INSERT OR IGNORE INTO session_plays(crate_id, position, track_id) VALUES (?,?,?)", rows)
+    return len(rows)
+
+
+def backfill_session_plays() -> int | None:
+    """Una sola vez: llena la secuencia de las sesiones ya importadas sin esperar a la próxima sincronización.
+    Lee una copia de la base de rekordbox (nunca la original) y solo escribe session_plays."""
+    if not rekordbox_available():
+        return None
+    from pyrekordbox import MasterDatabase
+
+    rb = MasterDatabase(path=str(snapshot()))
+    with db.conn() as c:
+        rb_to_id = {r["rb_id"]: r["id"] for r in c.execute("SELECT id, rb_id FROM tracks WHERE rb_id IS NOT NULL")}
+        crate_of = {r["rb_id"]: r["id"] for r in c.execute("SELECT id, rb_id FROM crates WHERE rb_id LIKE 'h:%'")}
+        sessions: dict[str, list[tuple[int, int]]] = {}
+        for s in rb.get_history_songs():
+            if str(s.ContentID) in rb_to_id:
+                sessions.setdefault(str(s.HistoryID), []).append((int(s.TrackNo or 0), rb_to_id[str(s.ContentID)]))
+        n = write_session_plays(c, sessions, crate_of)
+        db.set_meta(c, "session_plays", "1")
+        return n
+
+
 def _s(v) -> str | None:
     if v is None:
         return None
@@ -214,6 +246,7 @@ def sync(job: Job) -> dict:
                 if a != b:
                     pairs[(a, b)] += 1
         c.executemany("INSERT OR IGNORE INTO crate_tracks(crate_id, track_id, position) VALUES (?,?,?)", rows)
+        write_session_plays(c, sessions, crate_of)
         c.execute("DELETE FROM relations WHERE source='history'")
         c.executemany(
             "INSERT INTO relations(a, b, kind, source, count, weight) VALUES (?,?, 'history', 'history', ?, ?)",
@@ -324,13 +357,5 @@ def analyze_from_anlz(c: sqlite3.Connection, job: Job | None, p0: float, p1: flo
 
 
 def recompute_energy(c: sqlite3.Connection) -> None:
-    """Energía 1-10 relativa a TU librería (por percentiles)."""
-    rows = c.execute("SELECT id, energy_raw FROM tracks WHERE energy_raw IS NOT NULL").fetchall()
-    if not rows:
-        return
-    vals = np.array([r["energy_raw"] for r in rows])
-    ranks = vals.argsort().argsort() / max(len(vals) - 1, 1)
-    c.executemany(
-        "UPDATE tracks SET energy_auto=? WHERE id=?",
-        [(int(min(10, 1 + rk * 10)), r["id"]) for rk, r in zip(ranks, rows)],
-    )
+    """Energía 1-10 relativa a TU librería (por percentiles); ver features.rank_energy."""
+    features.rank_energy(c)

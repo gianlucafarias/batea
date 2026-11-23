@@ -1,11 +1,44 @@
 """Rasgos derivados de las curvas de volumen/bandas: energía, intro, outro, breaks y waveform."""
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 
 import numpy as np
 
 from .anlz import Curves
+
+
+# El análisis propio (librosa: RMS en dB) y el de rekordbox (altura de la waveform en 32 niveles) dan energías
+# en escalas distintas: sin traducir, todo lo analizado por Batea quedaba arriba de todo (10/10).
+# Medido el 2026-11-23 con 80 temas de rekordbox analizados de las dos formas: Spearman 0,91, error ~0,05.
+AUDIO_TO_ANLZ = (1.1557, -0.2753)
+
+
+def comparable_energy(raw: float, analyzed: str | None) -> float:
+    """energy_raw llevada a la escala de rekordbox, para poder comparar temas de los dos análisis."""
+    if analyzed == "audio":
+        k, m = AUDIO_TO_ANLZ
+        return raw * k + m
+    return raw
+
+
+def rank_energy(c: sqlite3.Connection) -> None:
+    """energy_auto: 1-10 entero por percentiles de TU librería (reparte parejo, para filtros y sugerencias).
+    energy_fine: 1-10 con decimales en escala lineal entre el 5% más bajo y el 0,5% más alto de la librería.
+    El percentil aplasta la punta: en una librería con cumbia y pop, todo el techno fuerte quedaba entre 9,4 y 10
+    y un set entero se veía como peak. La lineal mide cuánto pega cada tema y deja ver el recorrido del set."""
+    rows = c.execute("SELECT id, energy_raw, analyzed FROM tracks WHERE energy_raw IS NOT NULL").fetchall()
+    if not rows:
+        return
+    vals = np.array([comparable_energy(r[1], r[2]) for r in rows])
+    ranks = vals.argsort().argsort() / max(len(vals) - 1, 1)
+    lo, hi = np.percentile(vals, [5, 99.5])
+    fine = np.clip(1 + (vals - lo) / max(hi - lo, 1e-6) * 9, 1, 10)
+    c.executemany(
+        "UPDATE tracks SET energy_auto=?, energy_fine=? WHERE id=?",
+        [(int(min(10, 1 + rk * 10)), round(float(f), 2), r[0]) for rk, f, r in zip(ranks, fine, rows)],
+    )
 
 
 @dataclass

@@ -62,7 +62,7 @@ export function plural(n: number, one: string, many: string): string {
 
 export function cleanTitle(t: string | null | undefined): string {
   if (!t) return 'Sin título'
-  return t.replace(/\s*-\s*www\.[^\s]+/gi, '').replace(/^\d{1,3}[.\s-]+\s*/, '').trim() || t
+  return t.replace(/\s*-\s*www\.[^\s]+/gi, '').replace(/^\s*(?:y2mate\.(?:com|is)|www\.\S+)\s*-\s*/i, '').replace(/^\d{1,3}[.\s-]+\s*/, '').trim() || t
 }
 
 export const ROLE_CATEGORIES = ['estructura', 'versión', 'voz', 'momento', 'vibra']

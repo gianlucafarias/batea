@@ -34,7 +34,7 @@ export function MixPicker({ a, exclude, onPick, onClose, closing }: {
     let alive = true
     api.track(a).then((t) => { if (alive) setSource(t) }).catch(() => {})
     api.recommendations(a)
-      .then((r) => { if (alive) setRecs(r.items.map((x) => ({ track: x.track, why: plainReason(x.reasons) }))) })
+      .then((r) => { if (alive) setRecs(r.items.map((x) => ({ track: x.track, why: plainReason(x.reasons, x.why) }))) })
       .catch(() => { if (alive) setRecs([]) })
     return () => { alive = false }
   }, [a])

@@ -383,7 +383,7 @@ export function MapView({ scope, setScope, onMode }: Props) {
       <header className="viewhead">
         <div>
           <h1>Mapa</h1>
-          <div className="sub">{data ? plural(pts.length, 'tema', 'temas') : 'Cargando…'}</div>
+          <div className="sub">{data ? plural(pts.length, 'tema', 'temas') : 'Cargando…'} · Los temas que tocás juntos quedan cerca. Tocá uno para ver con qué se conecta.</div>
         </div>
         <div className="spacer" />
         <button className="btn ghost sm icon help-btn" aria-label="Cómo se usa" title="Arrastrá para girar · rueda para acercar · click derecho para mover · ⇧ + arrastrar para seleccionar">?</button>

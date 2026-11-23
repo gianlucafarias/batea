@@ -31,6 +31,35 @@ export interface Timing {
 }
 
 export const KILL = -48
+export const TEMPO_LIMIT = { A: 16, B: 50 } as const
+export const KEY_LIMIT = 6
+
+/** Tempo (%) y tono (semitonos) de cada deck. Con sync, B sigue el tempo de A y su `tempo` propio no se usa. */
+export interface DeckTune { tempoA: number; tempoB: number; keyA: number; keyB: number; sync: boolean }
+export const FLAT_TUNE: DeckTune = { tempoA: 0, tempoB: 0, keyA: 0, keyB: 0, sync: true }
+
+/** Mueve una tonalidad Camelot `semis` semitonos (un semitono son 7 pasos en la rueda). */
+export function shiftKey(k: string | null | undefined, semis: number): string | null {
+  const m = k ? /^(\d{1,2})([AB])$/.exec(k) : null
+  if (!m) return k ?? null
+  const s = Math.round(semis)
+  return `${(((Number(m[1]) - 1 + 7 * s) % 12) + 12) % 12 + 1}${m[2]}`
+}
+
+/** El corrimiento más chico que deja la tonalidad `from` compatible con `to` (misma, vecina o relativa), sin pasar `limit` en total. */
+export function keyMatch(from: string | null | undefined, to: string | null | undefined, current = 0, limit = KEY_LIMIT): number | null {
+  const a = from ? /^(\d{1,2})([AB])$/.exec(from) : null, b = to ? /^(\d{1,2})([AB])$/.exec(to) : null
+  if (!a || !b) return null
+  // a igual distancia, el que vuelve más cerca del tono original
+  const steps = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6].sort((x, y) => Math.abs(x) - Math.abs(y) || Math.abs(current + x) - Math.abs(current + y))
+  for (const s of steps) {
+    if (Math.abs(current + s) > limit) continue
+    const n = (((Number(a[1]) - 1 + 7 * s) % 12) + 12) % 12, m = Number(b[1]) - 1
+    const d = Math.min(Math.abs(n - m), 12 - Math.abs(n - m))
+    if (d === 0 || (d === 1 && a[2] === b[2])) return s
+  }
+  return null
+}
 export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
 
 export function makeDeck(t: TrackDetail, g: Grid, w: Waveform | null): Deck {

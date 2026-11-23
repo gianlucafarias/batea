@@ -98,6 +98,14 @@ CREATE TABLE IF NOT EXISTS crates (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Lo que sonó en cada sesión del historial, en orden y CON repeticiones (crate_tracks tiene un tema una sola vez,
+-- así que un tema que volviste a poner perdía su segundo lugar y el orden de la noche quedaba mal)
+CREATE TABLE IF NOT EXISTS session_plays (
+    crate_id INTEGER NOT NULL REFERENCES crates(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    PRIMARY KEY (crate_id, position)
+);
 CREATE TABLE IF NOT EXISTS crate_tracks (
     crate_id INTEGER NOT NULL REFERENCES crates(id) ON DELETE CASCADE,
     track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
@@ -219,6 +227,9 @@ MIGRATIONS = [
     ("crates", "source", "TEXT"),          # user | rekordbox | traktor | serato…
     ("user_cues", "color", "TEXT"),        # "r,g,b" de la cue
     ("crates", "home_position", "INTEGER"),  # orden elegido en la pantalla de Bateas (la sincronización no lo toca)
+    ("tracks", "analysis_ver", "INTEGER"),   # versión del análisis propio (analysis.ANALYSIS_VERSION); NULL = anterior a la 2
+    ("tracks", "key_ver", "INTEGER"),        # versión del detector de tono con que Batea estimó key (keyfill.KEY_VERSION)
+    ("tracks", "energy_fine", "REAL"),       # energía 1-10 con decimales en escala lineal (features.rank_energy), para los gráficos
 ]
 
 DEFAULT_HOTKEYS = {
@@ -341,6 +352,12 @@ def init() -> None:
                         (name, cat, color, "user", pos),
                     )
                     pos += 1
+        # energía: una vez, con el análisis propio traducido a la escala de rekordbox (antes quedaba todo en 10)
+        if get_meta(c, "energy_scale") != "3":
+            from .features import rank_energy
+
+            rank_energy(c)
+            set_meta(c, "energy_scale", "3")
         if get_meta(c, "hotkeys_seeded") is None:
             for name, key in DEFAULT_HOTKEYS.items():
                 c.execute("UPDATE tags SET hotkey=? WHERE name=? AND source='user' AND hotkey IS NULL", (key, name))
