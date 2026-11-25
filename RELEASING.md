@@ -15,7 +15,9 @@ unos 11 minutos con los dos en paralelo y no usa tu Mac. Es gratis porque el rep
    (`gh workflow run release.yml -f publicar=true`). Sin «publicar» deja los `.dmg` solo como artefactos de la ejecución.
 3. Queda el release `v<versión>` como **borrador** con los dos `.dmg` (notas = la sección del CHANGELOG). Revisarlo:
    descargar los `.dmg` y comprobar `spctl -a -t open --context context:primary-signature -vv` («Notarized Developer ID»),
-   `xcrun stapler validate`, y que la huella de cada `.build.json` (artefactos de la ejecución) sea la de `release.sh status`.
+   `xcrun stapler validate`, que la huella de cada `.build.json` (artefactos de la ejecución) sea la de `release.sh status`,
+   y que **cada app traiga todos sus módulos**: montar el `.dmg` y correr
+   `build/arm64/venv/bin/python scripts/check_bundle.py /Volumes/…/Batea.app` (tiene que decir que están todos).
 4. Publicarlo: `gh release edit v<versión> --draft=false --latest`.
 5. Si es obligatoria, `./scripts/release.sh require`; si no, `python3 scripts/update_manifest.py`. Commit y push de
    `update.json` (y `MIN_VERSION`) **al final**.
@@ -128,8 +130,18 @@ Empaquetada no hay Python suelto, ni carpeta del proyecto, ni `.venv`. Por eso:
   `~/Library/Application Support/Batea`) y `runtime.resource_dir()` para archivos que viajan dentro de la app.
 - **Procesos aparte:** nunca `[sys.executable, "-m", …]`. Usar `runtime.self_command("batea.modulo", args…)`; empaquetada
   se convierte en `Batea --run-module batea.modulo`. Esto sirve para el ícono de la barra, los links y el servidor MCP.
-- **Módulos nuevos:** `make_dist.sh` incluye todo `batea.*` (`--collect-submodules batea`); si un módulo se importa de
-  forma dinámica o desde otro proceso, probarlo con `--selftest`.
+- **Módulos nuevos (regla obligatoria, por lo que pasó de 0.3.0 a 0.5.0):** todo archivo de `backend/batea` tiene que viajar
+  en la app. PyInstaller solo ve lo que se importa de forma directa; lo que se carga con `importlib` se perdía sin aviso, y así la
+  app salió sin el lector de rekordbox durante cinco versiones («rekordbox no está en esta Mac» para todos los que la instalaron).
+  Tres capas lo impiden:
+  1. `make_dist.sh` corre PyInstaller con `PYTHONPATH=backend` (si no, `--collect-submodules batea` no encuentra el paquete y
+     no agrega nada) y además lista con `--hidden-import` los módulos que se cargan con `importlib`.
+  2. `scripts/check_bundle.py` compara los módulos de `backend/batea` con los que quedaron dentro de la app y **corta el build**
+     si falta uno. También sirve para revisar un `.dmg` ya publicado (con el Python de `build/<arch>/venv`).
+  3. `--selftest` importa cada lector de `sources/registry.ADAPTERS` y `nowplaying_traktor` y comprueba que el registro los carga.
+  Si agregás un módulo que se carga con `importlib` (otro programa en `ADAPTERS`, otro lector de «sonando ahora»), sumalo al
+  `--hidden-import` de `make_dist.sh` y a la prueba `dynamic_modules` de `selftest.py`. Nunca tragar un error de import en
+  silencio: escribirlo a stderr para que quede en el registro.
 - **Dependencias nuevas de Python:** agregarlas en **`backend/pyproject.toml` y en `backend/requirements-intel.in`**
   (`release.sh check` falla si no coinciden). Comprobar que existe binario para Intel (`uv pip compile
   backend/requirements-intel.in --python-platform x86_64-apple-darwin --python-version 3.12 --only-binary :all:`); si no

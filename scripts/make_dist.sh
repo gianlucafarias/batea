@@ -75,7 +75,9 @@ ESSENTIA_ARGS=()
 SIGN_ARGS=()
 [[ -n "${SIGN_ID:-}" ]] && SIGN_ARGS=(--codesign-identity "$SIGN_ID" --osx-entitlements-file "$ENT")
 rm -rf "$BUILD/dist" "$BUILD/work"
-"${PY[@]}" -m PyInstaller --noconfirm --clean --windowed --name Batea \
+# PYTHONPATH: --collect-submodules corre ANTES de que se aplique --paths; sin esto no encuentra `batea` y no agrega nada
+# (así se perdieron los módulos que se cargan con importlib, como el lector de rekordbox, de 0.3.0 a 0.5.0).
+PYTHONPATH="$ROOT/backend" "${PY[@]}" -m PyInstaller --noconfirm --clean --windowed --name Batea \
   --icon "$BUILD/Batea.icns" --osx-bundle-identifier app.batea.mac \
   --distpath "$BUILD/dist" --workpath "$BUILD/work" --specpath "$BUILD" \
   --paths "$ROOT/backend" --add-data "$BUILD/ui:frontend_dist" --add-data "$BUILD/build_info.json:." \
@@ -84,12 +86,16 @@ rm -rf "$BUILD/dist" "$BUILD/work"
   --collect-all pyrekordbox --collect-all webview --collect-all soundfile --collect-all mutagen \
   --copy-metadata mcp --copy-metadata fastapi --copy-metadata uvicorn --copy-metadata pydantic \
   --hidden-import batea.menubar --hidden-import batea.links --hidden-import batea.mcp_server \
+  --hidden-import batea.sources.rekordbox --hidden-import batea.sources.traktor --hidden-import batea.sources.serato \
+  --hidden-import batea.nowplaying_traktor \
   "${SIGN_ARGS[@]}" "$ROOT/backend/run_batea.py" > "$BUILD/pyinstaller.log" 2>&1 || {
     tail -60 "$BUILD/pyinstaller.log"
     echo "PyInstaller falló: no genero el instalador"; exit 1
   }
 tail -25 "$BUILD/pyinstaller.log"
 [[ -d "$APP" ]] || { echo "PyInstaller no generó la app"; exit 1; }
+# Todo módulo de backend/batea tiene que estar dentro de la app: si falta uno, no hay instalador.
+"${PY[@]}" "$ROOT/scripts/check_bundle.py" "$APP" || { echo "✗ Faltan módulos en la app: no genero el instalador"; exit 1; }
 
 echo "→ [5/7] Ajustes de la app (versión, permisos, links batea://)"
 PLIST="$APP/Contents/Info.plist"

@@ -11,6 +11,7 @@ import inspect
 import json
 import os
 import sqlite3
+import sys
 import threading
 import time
 from datetime import datetime
@@ -49,7 +50,9 @@ def adapter(kind: str, path: str | None = None):
         return
     try:
         cls = getattr(importlib.import_module(spec[0]), spec[1])
-    except Exception:  # noqa: BLE001  (falta el archivo o falla al importar: fuente no disponible)
+    except Exception as e:  # noqa: BLE001  (falta el archivo o falla al importar: fuente no disponible)
+        # Que quede en el registro: si no, se ve igual que "el programa no está en esta Mac" (pasó en 0.3.0–0.5.0).
+        print(f"Batea: no se pudo cargar el lector de {kind} ({spec[0]}): {type(e).__name__}: {e}", file=sys.stderr)
         yield None
         return
     if path and kind == "serato":

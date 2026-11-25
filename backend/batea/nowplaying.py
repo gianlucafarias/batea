@@ -16,6 +16,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import sys
 import threading
 import importlib
 import re
@@ -291,10 +292,17 @@ def _live_state(c: sqlite3.Connection, reading: LiveReading, limit: int) -> dict
     }
 
 
+_traktor_warned = False
+
+
 def _traktor():
+    global _traktor_warned
     try:
         return importlib.import_module("batea.nowplaying_traktor")
-    except Exception:  # noqa: BLE001  (todavía no existe o falla al importar: se ignora)
+    except Exception as e:  # noqa: BLE001  (falla al importar: se sigue sin Traktor, pero queda registrado una vez)
+        if not _traktor_warned:
+            _traktor_warned = True
+            print(f"Batea: no se pudo cargar batea.nowplaying_traktor: {type(e).__name__}: {e}", file=sys.stderr)
         return None
 
 

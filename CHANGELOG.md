@@ -3,6 +3,14 @@
 Cada vez que se arma un instalador nuevo se sube la versión (`./scripts/release.sh bump patch|minor|major`)
 y se anota acá, en lenguaje de quien usa Batea, qué cambió. Lo más nuevo arriba.
 
+## 0.5.1 — 2026-11-25
+
+**Arreglo urgente: rekordbox otra vez se sincroniza**
+- La app instalada desde el `.dmg` decía «rekordbox no está en esta Mac» aunque estuviera instalado, y no se podía sincronizar la librería. El instalador venía sin el lector de rekordbox (pasaba desde la 0.3.0; desde el código fuente sí andaba). Ahora viene incluido y la tarjeta de rekordbox aparece activa sin tocar nada.
+- También faltaba «Sonando ahora» para Traktor: ahora viene incluido.
+- Si un lector no se puede cargar, queda anotado en el registro de Batea en lugar de pasar como «no encontrado».
+- Los instaladores ya no se arman si falta cualquier parte de Batea adentro de la app.
+
 ## 0.5.0 — 2026-11-23
 
 **Gráfico de la caja**

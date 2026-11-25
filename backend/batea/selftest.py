@@ -224,6 +224,26 @@ def run() -> int:
 
     check("fuentes: detección sin programas", sources_empty)
 
+    def dynamic_modules() -> str:
+        """Los módulos que se cargan con importlib (lectores de cada programa, "sonando ahora" de Traktor) viajan en la app.
+
+        PyInstaller no los ve al seguir los imports: de 0.3.0 a 0.5.0 la app salió sin el lector de rekordbox y nadie
+        podía sincronizar (se veía "rekordbox no está en esta Mac"). Esta prueba lo detecta en la app empaquetada.
+        """
+        import importlib
+
+        from .sources import registry
+
+        mods = [spec[0] for spec in registry.ADAPTERS.values()] + ["batea.nowplaying_traktor"]
+        for m in mods:
+            importlib.import_module(m)
+        for kind in registry.ADAPTERS:
+            with registry.adapter(kind) as a:
+                assert a is not None, f"el lector de {kind} no carga"
+        return ", ".join(m.removeprefix("batea.") for m in mods)
+
+    check("módulos que se cargan aparte (lector de rekordbox y otros)", dynamic_modules)
+
     def import_synthetic() -> str:
         """Importar un volcado sintético de Traktor en una base temporal: temas, caja, sesión, transición y resync."""
         import sqlite3
