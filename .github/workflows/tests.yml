@@ -1,0 +1,48 @@
+# Pruebas del backend (unittest) en una Mac de GitHub, con el mismo entorno que usa make_dist.sh más PyInstaller.
+# Incluye tests/test_packaging.py: que la app empaquetada traiga todos los módulos (de 0.3.0 a 0.5.0 salió sin el
+# lector de rekordbox). Corre en cada push y pull request a main, y «Armar instaladores» no arma nada si falla.
+
+name: Pruebas
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "scripts/**", ".github/workflows/tests.yml"]
+  pull_request:
+    paths: ["backend/**", "scripts/**", ".github/workflows/tests.yml"]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  unittest:
+    name: Pruebas del backend
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      UV_PYTHON: "3.12"          # Essentia solo tiene wheels para 3.12 y 3.13
+      BATEA_REQUIRE_PYINSTALLER: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Entorno (igual que make_dist.sh, más PyInstaller)
+        run: |
+          UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/venv" uv sync --frozen --no-dev --project backend -q
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" -q pyinstaller
+          echo "PY=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Empaquetado (que la app traiga todos los módulos)
+        working-directory: backend
+        run: |
+          "$PY" -c "import PyInstaller; print('PyInstaller', PyInstaller.__version__)"
+          "$PY" -m unittest tests.test_packaging -v
+
+      - name: Todas las pruebas
+        working-directory: backend
+        run: '"$PY" -m unittest discover -s tests -t .'

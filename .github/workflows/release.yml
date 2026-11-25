@@ -6,6 +6,7 @@
 #   - publicar = no  → solo deja los .dmg como artefactos de la ejecución (para probar).
 #   - publicar = sí  → además crea el release v<VERSION> como BORRADOR con los dos .dmg.
 # update.json (lo que leen las apps instaladas) NO se toca acá: se sube después de revisar el release.
+# Antes de armar corren las pruebas (tests.yml, incluye las de empaquetado): si fallan, no se arma nada.
 #
 # Secretos del repositorio (Settings → Secrets and variables → Actions):
 #   MACOS_CERT_P12           certificado «Developer ID Application» + clave privada, exportado como .p12, en base64
@@ -32,8 +33,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  pruebas:
+    name: Pruebas
+    uses: ./.github/workflows/tests.yml
+
   build:
     name: Batea ${{ matrix.arch }}
+    needs: pruebas
     strategy:
       fail-fast: true
       matrix:

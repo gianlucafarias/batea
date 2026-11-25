@@ -139,6 +139,11 @@ Empaquetada no hay Python suelto, ni carpeta del proyecto, ni `.venv`. Por eso:
   2. `scripts/check_bundle.py` compara los módulos de `backend/batea` con los que quedaron dentro de la app y **corta el build**
      si falta uno. También sirve para revisar un `.dmg` ya publicado (con el Python de `build/<arch>/venv`).
   3. `--selftest` importa cada lector de `sources/registry.ADAPTERS` y `nowplaying_traktor` y comprueba que el registro los carga.
+  4. `backend/tests/test_packaging.py` (workflow «Pruebas», en cada push a `main`, y antes de cada «Armar instaladores»):
+     todo módulo que el código nombra como texto (`importlib`, `--run-module`, `ADAPTERS`) tiene que estar como `--hidden-import`;
+     PyInstaller tiene que correr con `PYTHONPATH`; `check_bundle.py` tiene que cortar el build; `collect_submodules` con ese
+     entorno encuentra todos los módulos; un lector que no carga queda anotado. En local:
+     `cd backend && ../build/arm64/venv/bin/python -m unittest tests.test_packaging` (con `.venv` se saltean las que usan PyInstaller).
   Si agregás un módulo que se carga con `importlib` (otro programa en `ADAPTERS`, otro lector de «sonando ahora»), sumalo al
   `--hidden-import` de `make_dist.sh` y a la prueba `dynamic_modules` de `selftest.py`. Nunca tragar un error de import en
   silencio: escribirlo a stderr para que quede en el registro.
