@@ -1,10 +1,10 @@
 {
-  "version": "0.5.0",
-  "min_version": "0.5.0",
-  "notes": "· «Ver gráfico» en cualquier caja o sesión del historial: la energía de cada tema con warm-up, subida, peak y…\n· Debajo, «Para revisar»: saltos de tempo, choques de tono, caídas bruscas de energía, pasadas con poco margen…\n· En cada pasada con problemas: «Tema puente» (temas que entran bien entre los dos, por tempo y tono de los dos…\n· Arrastrá un tema dentro del gráfico para moverlo: la curva, las fases y los avisos se recalculan mientras lo…",
-  "page": "https://github.com/gianlucafarias/batea/releases/tag/v0.5.0",
+  "version": "0.5.1",
+  "min_version": "0.5.1",
+  "notes": "· La app instalada desde el .dmg decía «rekordbox no está en esta Mac» aunque estuviera instalado, y no se…\n· También faltaba «Sonando ahora» para Traktor: ahora viene incluido\n· Si un lector no se puede cargar, queda anotado en el registro de Batea en lugar de pasar como «no encontrado»\n· Los instaladores ya no se arman si falta cualquier parte de Batea adentro de la app",
+  "page": "https://github.com/gianlucafarias/batea/releases/tag/v0.5.1",
   "downloads": {
-    "arm64": "https://github.com/gianlucafarias/batea/releases/download/v0.5.0/Batea-0.5.0-arm64.dmg",
-    "x86_64": "https://github.com/gianlucafarias/batea/releases/download/v0.5.0/Batea-0.5.0-x86_64.dmg"
+    "arm64": "https://github.com/gianlucafarias/batea/releases/download/v0.5.1/Batea-0.5.1-arm64.dmg",
+    "x86_64": "https://github.com/gianlucafarias/batea/releases/download/v0.5.1/Batea-0.5.1-x86_64.dmg"
   }
 }
